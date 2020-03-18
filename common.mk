@@ -33,7 +33,7 @@ release:
 	$(MAKE) pypi_release
 
 pypi_release:
-	python setup.py sdist
+	$(MAKE) sdist
 	twine upload dist/*
 
 undo:
