@@ -22,6 +22,9 @@ clean:
 	-rm -rf build dist
 	-rm -rf *.egg-info
 
+bgzip_utils: clean
+	python setup.py build_ext --inplace
+
 build: version clean
 	-rm -rf dist
 	python setup.py build_ext --inplace

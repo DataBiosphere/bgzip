@@ -1,0 +1,11 @@
+language: python
+python:
+  - 3.8
+install:
+  - pip install -r requirements-dev.txt
+  - make bgzip_utils
+script:
+  - set -eo pipefail
+  - make test
+after_success:
+  - bash <(curl -s https://codecov.io/bash)
