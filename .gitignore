@@ -1,0 +1,48 @@
+# Reminder:
+# - A leading slash means the pattern is anchored at the root.
+# - No leading slash means the pattern matches at any depth.
+
+# Python files
+*.pyc
+__pycache__/
+.mypy_cache/
+.tox/
+*.egg-info/
+/build/
+/dist/
+/.eggs/
+
+# IDE project files
+/.pydevproject
+
+# vim python-mode plugin
+*.swp
+/.ropeproject
+
+# vsCode IDE files
+/.vscode
+
+# IntelliJ IDEA / PyCharm project files
+/.idea
+/*.iml
+
+# JS/node/npm/web dev files
+node_modules
+npm-debug.log
+
+# OS X metadata files
+.DS_Store
+
+# Python coverage
+.coverage
+.coverage.*
+
+# Credential files
+/gcp-credentials.json
+/application_secrets.json
+
+# Terraform files
+.terraform
+backend.tf
+providers.tf
+variables.tf
