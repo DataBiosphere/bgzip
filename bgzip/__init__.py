@@ -1,42 +1,23 @@
 import io
-import os
-import gzip
-import time
-import struct
-import threading
+import multiprocessing
 from math import floor, ceil
-from concurrent.futures import ThreadPoolExecutor, as_completed
-from collections import namedtuple
+from concurrent.futures import ThreadPoolExecutor
 
 from . import bgzip_utils  # type: ignore
 
 
-number_of_reader_threads = 4
-number_of_writer_threads = 8
-
-
-_profile_info = dict()
-def profile(func):
-    _profile_info[func.__name__] = dict(number_of_calls=0, total_duration=0)
-
-    def wrapped(*args, **kwargs):
-        start = time.time()
-        res = func(*args, **kwargs)
-        _profile_info[func.__name__]['total_duration'] += time.time() - start
-        _profile_info[func.__name__]['number_of_calls'] += 1
-        return res
-
-    return wrapped
+available_cores = multiprocessing.cpu_count()
 
 
 class BGZipReader(io.IOBase):
     chunk_size = 256 * 1024
 
-    def __init__(self, fileobj):
+    def __init__(self, fileobj, num_threads=available_cores):
         self.fileobj = fileobj
         self._input_data = bytes()
         self._buffer = bytearray()
         self._pos = 0
+        self.num_threads = num_threads
 
     def readable(self):
         return True
@@ -51,7 +32,7 @@ class BGZipReader(io.IOBase):
                 break
             bytes_read = bgzip_utils.decompress_into(self._input_data,
                                                      self._buffer,
-                                                     num_threads=number_of_reader_threads)
+                                                     num_threads=self.num_threads)
             self._input_data = self._input_data[bytes_read:]
         ret_val = self._buffer[self._pos:self._pos + size]
         self._pos += size
@@ -72,11 +53,13 @@ class Window:
 class BGZipReaderCircularBuff(io.IOBase):
     chunk_size = 1024 * 1024
 
-    def __init__(self, fileobj):
+    def __init__(self, fileobj, buffer_size=1024 * 1024 * 500, num_threads=available_cores):
         self.fileobj = fileobj
         self._input_data = bytes()
-        self._buffer = memoryview(bytearray(1024 * 1024 * 1024 * 5))
+        self._buffer = memoryview(bytearray(buffer_size))
         self._bytes_available = 0
+
+        self.num_threads = num_threads
 
         self._windows = []
 
@@ -98,7 +81,7 @@ class BGZipReaderCircularBuff(io.IOBase):
             bytes_read, bytes_inflated = bgzip_utils.decompress_into_2(self._input_data,
                                                                        self._buffer,
                                                                        self._windows[-1].end,
-                                                                       num_threads=number_of_reader_threads)
+                                                                       num_threads=self.num_threads)
             if self._input_data and not bytes_inflated:
                 self._windows.append(Window())
             else:
@@ -130,14 +113,15 @@ class BGZipReaderCircularBuff(io.IOBase):
 
 class BGZipWriter(io.IOBase):
     chunk_size = bgzip_utils.block_inflated_size
-    batch_size = 20000
     block_metadata_size = bgzip_utils.block_metadata_size
 
-    def __init__(self, fileobj):
+    def __init__(self, fileobj, batch_size=2000, num_threads=available_cores):
         self.fileobj = fileobj
+        self.batch_size = batch_size
         self._input_buffer = bytearray()
         block_size = self.chunk_size + self.block_metadata_size
         self._scratch_buffers = [bytearray(block_size) for _ in range(self.batch_size)]
+        self.num_threads = num_threads
 
     def writable(self):
         return True
@@ -146,7 +130,7 @@ class BGZipWriter(io.IOBase):
         bgzip_utils.compress_to_stream(data,
                                        self._scratch_buffers,
                                        self.fileobj,
-                                       num_threads=number_of_writer_threads)
+                                       num_threads=self.num_threads)
 
     def _compress(self, process_all_chunks=False):
         number_of_chunks = len(self._input_buffer) / self.chunk_size
@@ -180,8 +164,8 @@ def async_writer_wait_func(number_of_futures):
 
 
 class AsyncBGZipWriter(BGZipWriter):
-    def __init__(self, fileobj):
-        super().__init__(fileobj)
+    def __init__(self, fileobj, *args, **kwargs):
+        super().__init__(fileobj, *args, **kwargs)
         self._executor = ThreadPoolExecutor(max_workers=1)
         self._futures = set()
 

@@ -2,7 +2,7 @@ include common.mk
 
 MODULES=bgzip tests
 
-test: lint mypy tests
+test: lint mypy bgzip_utils tests
 
 lint:
 	flake8 $(MODULES) *.py
