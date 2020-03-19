@@ -1,10 +1,20 @@
-# bgzip: blocked gzip streams
-_bgzip_ provides streams for blocked gzip files.
+# bgzip: block gzip streams
+_bgzip_ provides streams for block gzip files.
+
+Cython is used under the hood to bypass Python's GIL and provide fast, parallelized inflation/deflation.
+
+```
+with open("my_bgzipped_file.gz", "rb") as raw:
+	with bgzip.Reader(raw) as fh:
+		data = fh.read(number_of_bytes)
+
+with open("my_bgzipped_file.gz", "wb") as raw:
+	with bgzip.Writer(raw) as fh:
+		fh.write(my_data)
+```
 
 ## Installation
-```
 pip install bgzip
-```
 
 ## Links
 Project home page [GitHub](https://github.com/xbrianh/bgzip)  
