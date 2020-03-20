@@ -5,6 +5,7 @@ import sys
 import time
 import unittest
 import gzip
+from random import randint
 from contextlib import AbstractContextManager
 
 pkg_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))  # noqa
@@ -14,13 +15,15 @@ import bgzip
 
 
 class TestBGZipReader(unittest.TestCase):
+    reader_class = bgzip.BGZipReader
+
     def test_read(self):
         with open("tests/fixtures/partial.vcf.gz", "rb") as raw:
             with gzip.GzipFile(fileobj=raw) as fh:
                 expected_data = fh.read()
 
         with open("tests/fixtures/partial.vcf.gz", "rb") as raw:
-            with bgzip.BGZipReader(raw) as fh:
+            with self.reader_class(raw) as fh:
                 a = fh.read()
 
         self.assertEqual(a, expected_data[:-1])
@@ -43,16 +46,18 @@ class TestBGZipReader(unittest.TestCase):
 
 
 class TestBGZipReaderCircularBuff(TestBGZipReader):
+    reader_class = bgzip.BGZipReaderCircularBuff  # type: ignore
+
     def test_read(self):
         with open("tests/fixtures/partial.vcf.gz", "rb") as raw:
             with gzip.GzipFile(fileobj=raw) as fh:
                 expected_data = fh.read()
 
         with open("tests/fixtures/partial.vcf.gz", "rb") as raw:
-            with bgzip.BGZipReader(raw) as fh:
+            with self.reader_class(raw) as fh:
                 a = bytearray()
                 while True:
-                    data = fh.read(1024 * 1024)
+                    data = fh.read(randint(1024 * 1024 * 1, 1024 * 1024 * 10))
                     if not data:
                         break
                     a.extend(data)
@@ -61,19 +66,15 @@ class TestBGZipReaderCircularBuff(TestBGZipReader):
 
 
 class TestBGZipWriter(unittest.TestCase):
+    writer_class = bgzip.BGZipWriter
+
     def test_write(self):
-        self._test_write(bgzip.BGZipWriter)
-
-    def test_async_write(self):
-        self._test_write(bgzip.AsyncBGZipWriter)
-
-    def _test_write(self, writer_class):
         with open("tests/fixtures/partial.vcf.gz", "rb") as raw:
             with gzip.GzipFile(fileobj=raw) as fh:
                 inflated_data = fh.read()
 
         fh_out = io.BytesIO()
-        with writer_class(fh_out) as writer:
+        with self.writer_class(fh_out) as writer:
             n = 987345
             writer.write(inflated_data[:n])
             writer.write(inflated_data[n:])
@@ -87,6 +88,10 @@ class TestBGZipWriter(unittest.TestCase):
         fh = io.BytesIO()
         with bgzip.BGZipWriter(fh):
             fh.write(b"")
+
+
+class TestAsyncBGZipWriter(TestBGZipWriter):
+    writer_class = bgzip.AsyncBGZipWriter  # type: ignore
 
 
 class TestProfileBGZip(unittest.TestCase):
