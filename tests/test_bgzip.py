@@ -13,7 +13,7 @@ sys.path.insert(0, pkg_root)  # noqa
 import bgzip
 
 
-class TestBGZip(unittest.TestCase):
+class TestBGZipReader(unittest.TestCase):
     def test_read(self):
         with open("tests/fixtures/partial.vcf.gz", "rb") as raw:
             with gzip.GzipFile(fileobj=raw) as fh:
@@ -25,14 +25,47 @@ class TestBGZip(unittest.TestCase):
 
         self.assertEqual(a, expected_data[:-1])
 
-    # TODO: Test BGZipReaderCircularBuff reader
+    def test_read_into_better(self):
+        with open("tests/fixtures/partial.vcf.gz", "rb") as raw:
+            a = bytearray()
+            with bgzip.BGZipReaderCircularBuff(raw) as fh:
+                while True:
+                    data = fh.read(30 * 1024 * 1024)
+                    if not data:
+                        break
+                    a.extend(data)
 
+        with open("tests/fixtures/partial.vcf.gz", "rb") as raw:
+            with gzip.GzipFile(fileobj=raw) as fh:
+                b = fh.read()
+
+        self.assertEqual(a, b)
+
+
+class TestBGZipReaderCircularBuff(TestBGZipReader):
+    def test_read(self):
+        with open("tests/fixtures/partial.vcf.gz", "rb") as raw:
+            with gzip.GzipFile(fileobj=raw) as fh:
+                expected_data = fh.read()
+
+        with open("tests/fixtures/partial.vcf.gz", "rb") as raw:
+            with bgzip.BGZipReader(raw) as fh:
+                a = bytearray()
+                while True:
+                    data = fh.read(1024 * 1024)
+                    if not data:
+                        break
+                    a.extend(data)
+
+        self.assertEqual(a, expected_data)
+
+
+class TestBGZipWriter(unittest.TestCase):
     def test_write(self):
-        with self.subTest("Test sync writer"):
-            self._test_write(bgzip.BGZipWriter)
+        self._test_write(bgzip.BGZipWriter)
 
-        with self.subTest("Test async writer"):
-            self._test_write(bgzip.AsyncBGZipWriter)
+    def test_async_write(self):
+        self._test_write(bgzip.AsyncBGZipWriter)
 
     def _test_write(self, writer_class):
         with open("tests/fixtures/partial.vcf.gz", "rb") as raw:
@@ -55,21 +88,6 @@ class TestBGZip(unittest.TestCase):
         with bgzip.BGZipWriter(fh):
             fh.write(b"")
 
-    def test_read_into_better(self):
-        with open("tests/fixtures/partial.vcf.gz", "rb") as raw:
-            a = bytearray()
-            with bgzip.BGZipReaderCircularBuff(raw) as fh:
-                while True:
-                    data = fh.read(30 * 1024 * 1024)
-                    if not data:
-                        break
-                    a.extend(data)
-
-        with open("tests/fixtures/partial.vcf.gz", "rb") as raw:
-            with gzip.GzipFile(fileobj=raw) as fh:
-                b = fh.read()
-
-        self.assertEqual(a, b)
 
 class TestProfileBGZip(unittest.TestCase):
     def test_profile_read(self):
@@ -103,6 +121,7 @@ class TestProfileBGZip(unittest.TestCase):
                     writer.write(inflated_data[:n])
                     writer.write(inflated_data[n:])
         print()
+
 
 class profile(AbstractContextManager):
     """
