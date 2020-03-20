@@ -1,7 +1,7 @@
 import io
 import multiprocessing
 from math import floor, ceil
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from . import bgzip_utils  # type: ignore
 
@@ -50,27 +50,30 @@ class Window:
         self.end = end
 
 
-class BGZipReaderCircularBuff(io.IOBase):
-    chunk_size = 1024 * 1024
+class BGZipReaderPreAllocated(io.IOBase):
+    """
+    Inflate data into a pre-allocated buffer. The buffer size will not change, and should be large enough
+    to hold at least twice the data of any call to `read`.
+    """
 
-    def __init__(self, fileobj, buffer_size=1024 * 1024 * 500, num_threads=available_cores):
+    chunk_size = 256 * 1024
+
+    def __init__(self, fileobj, buf: memoryview, num_threads=available_cores):
         self.fileobj = fileobj
         self._input_data = bytes()
-        self._buffer = memoryview(bytearray(buffer_size))
+        self._buffer = buf
         self._bytes_available = 0
 
         self.num_threads = num_threads
 
-        self._windows = []
+        self._windows = []  # type: ignore
 
     def readable(self):
         return True
 
-    def read(self, size):
-        """
-        Return a view to mutable memory. View should be consumed before calling `read` again.
-        """
-        assert size > 0
+    def _fetch_and_inflate(self, size):
+        # TODO: prevent window overlap.
+        #       does `self._bytes_available < len(self._buffer) / 2` do the trick?
         while self._bytes_available < size and self._bytes_available < len(self._buffer) / 2:
             if not self._windows:
                 self._windows.append(Window())
@@ -90,6 +93,8 @@ class BGZipReaderCircularBuff(io.IOBase):
                 self._windows[-1].end += bytes_inflated
                 if self._windows[-1].end > len(self._buffer):
                     raise Exception("not good")
+
+    def _read(self, size):
         start, end = self._windows[0].start, self._windows[0].end
         size = min(size, end - start)
         ret_val = self._buffer[start:start + size]
@@ -98,6 +103,14 @@ class BGZipReaderCircularBuff(io.IOBase):
         if self._windows[0].start >= self._windows[0].end:
             self._windows.pop(0)
         return ret_val
+
+    def read(self, size):
+        """
+        Return a view to mutable memory. View should be consumed before calling `read` again.
+        """
+        assert size > 0
+        self._fetch_and_inflate(size)
+        return self._read(size)
 
     def readinto(self, buff):
         sz = len(buff)
@@ -109,6 +122,44 @@ class BGZipReaderCircularBuff(io.IOBase):
             buff[bytes_read:bytes_read + len(mv)] = mv
             bytes_read += len(mv)
         return bytes_read
+
+
+class BGZipAsyncReaderPreAllocated(BGZipReaderPreAllocated):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._executor = ThreadPoolExecutor(max_workers=1)
+        self._futures = list()
+        self._buffer_size = 1 * 1024 * 1024
+
+    @property
+    def future_size(self):
+        return self._bytes_available + self._buffer_size * len(self._futures)
+
+    def _fetch_and_inflate(self, size):
+        f = self._executor.submit(super()._fetch_and_inflate, self._buffer_size)
+        f.add_done_callback(self._finalize_future)
+        self._futures.append(f)
+
+    def _finalize_future(self, f):
+        self._futures.remove(f)
+
+    def _wait_for_futures(self):
+        for _ in as_completed(self._futures[0:]):
+            pass
+
+    def read(self, size):
+        if size <= self._bytes_available:
+            pass
+        elif size <= self.future_size:
+            while size <= self.future_size:
+                self._wait_for_futures()
+        else:
+            desired = size + self._buffer_size
+            gap = size - self._bytes_available
+            self._fetch_and_inflate(gap)
+            self._fetch_and_inflate(desired - gap)
+            self._wait_for_futures()
+        return self._read(size)
 
 
 class BGZipWriter(io.IOBase):

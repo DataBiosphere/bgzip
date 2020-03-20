@@ -15,7 +15,8 @@ import bgzip
 
 
 class TestBGZipReader(unittest.TestCase):
-    reader_class = bgzip.BGZipReader
+    def _get_reader(self, handle):
+        return bgzip.BGZipReader(handle)
 
     def test_read(self):
         with open("tests/fixtures/partial.vcf.gz", "rb") as raw:
@@ -23,7 +24,23 @@ class TestBGZipReader(unittest.TestCase):
                 expected_data = fh.read()
 
         with open("tests/fixtures/partial.vcf.gz", "rb") as raw:
-            with self.reader_class(raw) as fh:
+            with self._get_reader(raw) as fh:
+                a = bytearray()
+                while True:
+                    data = fh.read(randint(1024 * 1024 * 1, 1024 * 1024 * 10))
+                    if not data:
+                        break
+                    a.extend(data)
+
+        self.assertEqual(a, expected_data)
+
+    def test_read_all(self):
+        with open("tests/fixtures/partial.vcf.gz", "rb") as raw:
+            with gzip.GzipFile(fileobj=raw) as fh:
+                expected_data = fh.read()
+
+        with open("tests/fixtures/partial.vcf.gz", "rb") as raw:
+            with self._get_reader(raw) as fh:
                 a = fh.read()
 
         self.assertEqual(a, expected_data[:-1])
@@ -31,7 +48,7 @@ class TestBGZipReader(unittest.TestCase):
     def test_read_into_better(self):
         with open("tests/fixtures/partial.vcf.gz", "rb") as raw:
             a = bytearray()
-            with bgzip.BGZipReaderCircularBuff(raw) as fh:
+            with self._get_reader(raw) as fh:
                 while True:
                     data = fh.read(30 * 1024 * 1024)
                     if not data:
@@ -45,24 +62,19 @@ class TestBGZipReader(unittest.TestCase):
         self.assertEqual(a, b)
 
 
-class TestBGZipReaderCircularBuff(TestBGZipReader):
-    reader_class = bgzip.BGZipReaderCircularBuff  # type: ignore
+class TestBGZipReaderPreAllocated(TestBGZipReader):
+    def _get_reader(self, handle):
+        return bgzip.BGZipReaderPreAllocated(handle, memoryview(bytearray(1024 * 1024 * 50)))
 
-    def test_read(self):
+    def test_read_all(self):
         with open("tests/fixtures/partial.vcf.gz", "rb") as raw:
-            with gzip.GzipFile(fileobj=raw) as fh:
-                expected_data = fh.read()
+            with self._get_reader(raw) as fh:
+                with self.assertRaises(TypeError):
+                    fh.read()
 
-        with open("tests/fixtures/partial.vcf.gz", "rb") as raw:
-            with self.reader_class(raw) as fh:
-                a = bytearray()
-                while True:
-                    data = fh.read(randint(1024 * 1024 * 1, 1024 * 1024 * 10))
-                    if not data:
-                        break
-                    a.extend(data)
-
-        self.assertEqual(a, expected_data)
+class TestBGZipAsyncReaderPreAllocated(TestBGZipReaderPreAllocated):
+    def _get_reader(self, handle):
+        return bgzip.BGZipAsyncReaderPreAllocated(handle, memoryview(bytearray(1024 * 1024 * 50)))
 
 
 class TestBGZipWriter(unittest.TestCase):
@@ -95,19 +107,31 @@ class TestAsyncBGZipWriter(TestBGZipWriter):
 
 
 class TestProfileBGZip(unittest.TestCase):
+    buf = memoryview(bytearray(1024 * 1024 * 50))
+
+    def _get_reader_for_class(self, reader_class, handle, num_threads):
+        if reader_class.__name__ == "BGZipReader":
+            return bgzip.BGZipReader(handle, num_threads=num_threads)
+        else:
+            return reader_class(handle, self.buf, num_threads=num_threads)
+
     def test_profile_read(self):
         print()
-        with open("tests/fixtures/partial.vcf.gz", "rb") as raw:
-            with profile("gzip read"):
-                with gzip.GzipFile(fileobj=raw) as fh:
-                    fh.read()
-
-        for num_threads in range(1, 1 + bgzip.available_cores):
-            with profile(f"bgzip read (num_threads={num_threads})"):
-                with open("tests/fixtures/partial.vcf.gz", "rb") as raw:
-                    with bgzip.BGZipReader(raw, num_threads=num_threads) as fh:
+        for reader_class in [bgzip.BGZipReader, bgzip.BGZipReaderPreAllocated, bgzip.BGZipAsyncReaderPreAllocated]:
+            with open("tests/fixtures/partial.vcf.gz", "rb") as raw:
+                with profile("gzip read"):
+                    with gzip.GzipFile(fileobj=raw) as fh:
                         fh.read()
-        print()
+
+            for num_threads in range(1, 1 + bgzip.available_cores):
+                with open("tests/fixtures/partial.vcf.gz", "rb") as raw:
+                    reader = self._get_reader_for_class(reader_class, raw, num_threads)
+                    with profile(f"{reader_class.__name__} read (num_threads={num_threads})"):
+                        while True:
+                            data = reader.read(randint(1024 * 1024 * 1, 1024 * 1024 * 10))
+                            if not data:
+                                break
+            print()
 
     def test_profile_write(self):
         print()
