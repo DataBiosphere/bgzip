@@ -312,9 +312,9 @@ cdef void compress_block(Block * block) nogil:
     block.block_size = 1 + head_subfield.block_size
 
 
-cdef unsigned int _block_inflated_size = 65280
+cdef unsigned int _block_data_inflated_size = 65280
 cdef unsigned int _block_metadata_size = sizeof(BlockHeader) + sizeof(BlockHeaderBGZipSubfield) + sizeof(BlockTailer)
-block_inflated_size = _block_inflated_size
+block_data_inflated_size = _block_data_inflated_size
 block_metadata_size = _block_metadata_size
 
 
@@ -369,11 +369,11 @@ def compress_to_stream(input_buff_obj, list scratch_buffers, handle, int num_thr
     Compress the data in `input_buff_obj` and write it to `handle`.
 
     `scratch_buffers` should contain enough buffers to hold the number of blocks compressed. Each
-    buffer should hold `_block_inflated_size + _block_metadata_size` bytes.
+    buffer should hold `_block_data_inflated_size + _block_metadata_size` bytes.
     """
     cdef int i, chunk_size
     cdef unsigned int bytes_available = len(input_buff_obj)
-    cdef int number_of_chunks = ceil(bytes_available / block_inflated_size)
+    cdef int number_of_chunks = ceil(bytes_available / block_data_inflated_size)
     cdef Block blocks[NUMBER_OF_BLOCKS]
 
     if number_of_chunks > NUMBER_OF_BLOCKS:
@@ -389,18 +389,18 @@ def compress_to_stream(input_buff_obj, list scratch_buffers, handle, int num_thr
         for i in range(number_of_chunks):
             compressed_chunk = <PyObject *>PyList_GetItem(compressed_chunks, i)
 
-            if bytes_available >= _block_inflated_size:
-                chunk_size = _block_inflated_size
+            if bytes_available >= _block_data_inflated_size:
+                chunk_size = _block_data_inflated_size
             else:
                 chunk_size = bytes_available
 
-            bytes_available -= _block_inflated_size
+            bytes_available -= _block_data_inflated_size
 
             blocks[i].inflated_size = chunk_size
-            blocks[i].next_in = <Bytef *>input_view.buf + (i * _block_inflated_size)
+            blocks[i].next_in = <Bytef *>input_view.buf + (i * _block_data_inflated_size)
             blocks[i].available_in = chunk_size
             blocks[i].next_out = <Bytef *>PyByteArray_AS_STRING(compressed_chunk)
-            blocks[i].avail_out = _block_inflated_size + _block_metadata_size
+            blocks[i].avail_out = _block_data_inflated_size + _block_metadata_size
 
         for i in prange(number_of_chunks, num_threads=num_threads, schedule="dynamic"):
             compress_block(&blocks[i])

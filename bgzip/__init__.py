@@ -10,14 +10,13 @@ available_cores = multiprocessing.cpu_count()
 
 
 class BGZipReader(io.IOBase):
-    chunk_size = 256 * 1024
-
-    def __init__(self, fileobj, num_threads=available_cores):
+    def __init__(self, fileobj, num_threads=available_cores, raw_read_chunk_size=256 * 1024):
         self.fileobj = fileobj
         self._input_data = bytes()
         self._buffer = bytearray()
         self._pos = 0
         self.num_threads = num_threads
+        self.raw_read_chunk_size = raw_read_chunk_size
 
     def readable(self):
         return True
@@ -27,7 +26,7 @@ class BGZipReader(io.IOBase):
             if self._pos:
                 del self._buffer[:self._pos]
                 self._pos = 0
-            self._input_data += self.fileobj.read(self.chunk_size)
+            self._input_data += self.fileobj.read(self.raw_read_chunk_size)
             if not self._input_data:
                 break
             bytes_read = bgzip_utils.decompress_into(self._input_data,
@@ -50,19 +49,17 @@ class Window:
         self.end = end
 
 
-class BGZipReaderPreAllocated(io.IOBase):
+class BGZipReaderPreAllocated(BGZipReader):
     """
     Inflate data into a pre-allocated buffer. The buffer size will not change, and should be large enough
     to hold at least twice the data of any call to `read`.
     """
-
-    chunk_size = 256 * 1024
-
-    def __init__(self, fileobj, buf: memoryview, num_threads=available_cores):
+    def __init__(self, fileobj, buf: memoryview, num_threads=available_cores, raw_read_chunk_size=256 * 1024):
         self.fileobj = fileobj
         self._input_data = bytes()
         self._buffer = buf
         self._bytes_available = 0
+        self.raw_read_chunk_size = raw_read_chunk_size
 
         self.num_threads = num_threads
 
@@ -78,7 +75,7 @@ class BGZipReaderPreAllocated(io.IOBase):
             if not self._windows:
                 self._windows.append(Window())
 
-            self._input_data += self.fileobj.read(self.chunk_size)
+            self._input_data += self.fileobj.read(self.raw_read_chunk_size)
             if not self._input_data:
                 break
             bytes_read, bytes_inflated = bgzip_utils.decompress_into_2(self._input_data,
@@ -125,18 +122,23 @@ class BGZipReaderPreAllocated(io.IOBase):
 
 
 class BGZipAsyncReaderPreAllocated(BGZipReaderPreAllocated):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+    def __init__(self,
+                 fileobj,
+                 buf: memoryview,
+                 num_threads=available_cores,
+                 raw_read_chunk_size=256 * 1024,
+                 read_buffer_size=1024 * 1024):
+        super().__init__(fileobj, buf, num_threads, raw_read_chunk_size)
         self._executor = ThreadPoolExecutor(max_workers=1)
-        self._futures = list()
-        self._buffer_size = 1 * 1024 * 1024
+        self._futures = list()  # type: ignore
+        self._read_buffer_size = 1 * 1024 * 1024
 
     @property
     def future_size(self):
-        return self._bytes_available + self._buffer_size * len(self._futures)
+        return self._bytes_available + self._read_buffer_size * len(self._futures)
 
     def _fetch_and_inflate(self, size):
-        f = self._executor.submit(super()._fetch_and_inflate, self._buffer_size)
+        f = self._executor.submit(super()._fetch_and_inflate, self._read_buffer_size)
         f.add_done_callback(self._finalize_future)
         self._futures.append(f)
 
@@ -154,7 +156,7 @@ class BGZipAsyncReaderPreAllocated(BGZipReaderPreAllocated):
             while size <= self.future_size:
                 self._wait_for_futures()
         else:
-            desired = size + self._buffer_size
+            desired = size + self._read_buffer_size
             gap = size - self._bytes_available
             self._fetch_and_inflate(gap)
             self._fetch_and_inflate(desired - gap)
@@ -163,14 +165,11 @@ class BGZipAsyncReaderPreAllocated(BGZipReaderPreAllocated):
 
 
 class BGZipWriter(io.IOBase):
-    chunk_size = bgzip_utils.block_inflated_size
-    block_metadata_size = bgzip_utils.block_metadata_size
-
     def __init__(self, fileobj, batch_size=2000, num_threads=available_cores):
         self.fileobj = fileobj
         self.batch_size = batch_size
         self._input_buffer = bytearray()
-        block_size = self.chunk_size + self.block_metadata_size
+        block_size = bgzip_utils.block_data_inflated_size + bgzip_utils.block_metadata_size
         self._scratch_buffers = [bytearray(block_size) for _ in range(self.batch_size)]
         self.num_threads = num_threads
 
@@ -184,7 +183,7 @@ class BGZipWriter(io.IOBase):
                                        num_threads=self.num_threads)
 
     def _compress(self, process_all_chunks=False):
-        number_of_chunks = len(self._input_buffer) / self.chunk_size
+        number_of_chunks = len(self._input_buffer) / bgzip_utils.block_data_inflated_size
         number_of_chunks = ceil(number_of_chunks) if process_all_chunks else floor(number_of_chunks)
 
         while number_of_chunks:
@@ -192,7 +191,7 @@ class BGZipWriter(io.IOBase):
             if batch < self.batch_size and not process_all_chunks:
                 break
 
-            n = batch * self.chunk_size
+            n = batch * bgzip_utils.block_data_inflated_size
             self._deflate_and_write(memoryview(self._input_buffer)[:n])
             self._input_buffer = self._input_buffer[n:]
 
@@ -200,7 +199,7 @@ class BGZipWriter(io.IOBase):
 
     def write(self, data):
         self._input_buffer.extend(data)
-        if len(self._input_buffer) > self.batch_size * self.chunk_size:
+        if len(self._input_buffer) > self.batch_size * bgzip_utils.block_data_inflated_size:
             self._compress()
 
     def close(self):
