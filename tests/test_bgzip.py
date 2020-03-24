@@ -85,6 +85,9 @@ class TestBGZipReaderPreAllocated(TestBGZipReader):
         with self.subTest("Should NOT be able to pass in memoryview to bytes"):
             with self.assertRaises(ValueError):
                 self.reader_class(io.BytesIO(), b"laskdf")
+        with self.subTest("Should NOT be able to pass in non-bytes-like object"):
+            with self.assertRaises(TypeError):
+                self.reader_class(io.BytesIO(), 2)
 
 
 class TestBGZipAsyncReaderPreAllocated(TestBGZipReaderPreAllocated):
