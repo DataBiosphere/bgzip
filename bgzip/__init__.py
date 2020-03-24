@@ -55,10 +55,16 @@ class BGZipReaderPreAllocated(BGZipReader):
     Inflate data into a pre-allocated buffer. The buffer size will not change, and should be large enough
     to hold at least twice the data of any call to `read`.
     """
-    def __init__(self, fileobj, buf: bytearray, num_threads=available_cores, raw_read_chunk_size=256 * 1024):
+    def __init__(self,
+                 fileobj: typing.IO,
+                 buf: memoryview,
+                 num_threads=available_cores,
+                 raw_read_chunk_size=256 * 1024):
+        if not isinstance(buf, memoryview):
+            buf = memoryview(buf)
         self.fileobj = fileobj
         self._input_data = bytes()
-        self._scratch = memoryview(buf)
+        self._scratch = buf
         self._bytes_available = 0
         self.raw_read_chunk_size = raw_read_chunk_size
 
@@ -124,8 +130,8 @@ class BGZipReaderPreAllocated(BGZipReader):
 
 class BGZipAsyncReaderPreAllocated(BGZipReaderPreAllocated):
     def __init__(self,
-                 fileobj,
-                 buf: bytearray,
+                 fileobj: typing.IO,
+                 buf: memoryview,
                  num_threads: int=available_cores,
                  raw_read_chunk_size: int=256 * 1024,
                  read_buffer_size: int=1024 * 1024):
