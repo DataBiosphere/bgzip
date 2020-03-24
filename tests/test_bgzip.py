@@ -63,8 +63,10 @@ class TestBGZipReader(unittest.TestCase):
 
 
 class TestBGZipReaderPreAllocated(TestBGZipReader):
+    reader_class = bgzip.BGZipReaderPreAllocated
+
     def _get_reader(self, handle):
-        return bgzip.BGZipReaderPreAllocated(handle, memoryview(bytearray(1024 * 1024 * 50)))
+        return self.reader_class(handle, memoryview(bytearray(1024 * 1024 * 50)))
 
     def test_read_all(self):
         with open("tests/fixtures/partial.vcf.gz", "rb") as raw:
@@ -72,9 +74,24 @@ class TestBGZipReaderPreAllocated(TestBGZipReader):
                 with self.assertRaises(TypeError):
                     fh.read()
 
+    def test_buffers(self):
+        with self.subTest("Should be able to pass in bytearray"):
+            self.reader_class(io.BytesIO(), bytearray(b"laskdf"))
+        with self.subTest("Should be able to pass in memoryview to bytearray"):
+            self.reader_class(io.BytesIO(), memoryview(bytearray(b"laskdf")))
+        with self.subTest("Should NOT be able to pass in bytes"):
+            with self.assertRaises(ValueError):
+                self.reader_class(io.BytesIO(), b"laskdf")
+        with self.subTest("Should NOT be able to pass in memoryview to bytes"):
+            with self.assertRaises(ValueError):
+                self.reader_class(io.BytesIO(), b"laskdf")
+        with self.subTest("Should NOT be able to pass in non-bytes-like object"):
+            with self.assertRaises(TypeError):
+                self.reader_class(io.BytesIO(), 2)
+
+
 class TestBGZipAsyncReaderPreAllocated(TestBGZipReaderPreAllocated):
-    def _get_reader(self, handle):
-        return bgzip.BGZipAsyncReaderPreAllocated(handle, memoryview(bytearray(1024 * 1024 * 50)))
+    reader_class = bgzip.BGZipAsyncReaderPreAllocated
 
 
 class TestBGZipWriter(unittest.TestCase):
