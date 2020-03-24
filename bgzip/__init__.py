@@ -62,6 +62,8 @@ class BGZipReaderPreAllocated(BGZipReader):
                  raw_read_chunk_size=256 * 1024):
         if not isinstance(buf, memoryview):
             buf = memoryview(buf)
+        if buf.readonly:
+            raise ValueError("Expected readable buffer")
         self.fileobj = fileobj
         self._input_data = bytes()
         self._scratch = buf
