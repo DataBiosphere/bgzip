@@ -29,7 +29,7 @@ with open("README.md") as fh:
 
 setup(
     name='bgzip',
-    version='0.2.0',
+    version='0.2.1',
     description='Utilities working with blocked gzip streams.',
     long_description=long_description,
     long_description_content_type='text/markdown',
