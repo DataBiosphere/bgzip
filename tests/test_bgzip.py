@@ -122,6 +122,15 @@ class TestBGZipWriter(unittest.TestCase):
 class TestAsyncBGZipWriter(TestBGZipWriter):
     writer_class = bgzip.AsyncBGZipWriter  # type: ignore
 
+    def test_queue_size(self):
+        fh = io.BytesIO()
+        with self.subTest("should be able to pass in queue_size"):
+            foo = self.writer_class(fh, queue_size=4)
+            self.assertEqual(foo.queue_size, 4)
+        with self.subTest("should NOT be able to pass in non-int queue_size"):
+            with self.assertRaises(ValueError):
+                self.writer_class(fh, queue_size="frank")
+
 
 class TestProfileBGZip(unittest.TestCase):
     buf = memoryview(bytearray(1024 * 1024 * 50))
