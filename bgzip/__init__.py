@@ -218,13 +218,18 @@ class BGZipWriter(io.IOBase):
 
 
 class AsyncBGZipWriter(BGZipWriter):
-    def __init__(self, fileobj, *args, **kwargs):
-        super().__init__(fileobj, *args, **kwargs)
+    def __init__(self, *args, **kwargs):
+        if "queue_size" in kwargs:
+            self.queue_size = int(kwargs['queue_size'])
+            del kwargs['queue_size']
+        else:
+            self.queue_size = 2
+        super().__init__(*args, **kwargs)
         self._executor = ThreadPoolExecutor(max_workers=1)
         self._futures = list()
 
     def _deflate_and_write(self, data):
-        if 2 <= len(self._futures):
+        if self.queue_size <= len(self._futures):
             for _ in as_completed(self._futures[:1]):
                 pass
         f = self._executor.submit(super()._deflate_and_write, data)
