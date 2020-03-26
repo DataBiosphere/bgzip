@@ -148,8 +148,8 @@ class BGZipAsyncReaderPreAllocated(BGZipReaderPreAllocated):
 
     def _fetch_and_inflate(self, size):
         f = self._executor.submit(super()._fetch_and_inflate, self._read_buffer_size)
-        f.add_done_callback(self._finalize_future)
         self._futures.append(f)
+        f.add_done_callback(self._finalize_future)
 
     def _finalize_future(self, f):
         self._futures.remove(f)
@@ -217,26 +217,23 @@ class BGZipWriter(io.IOBase):
         self.fileobj.flush()
 
 
-def async_writer_wait_func(number_of_futures):
-    if 20 < number_of_futures:
-        raise Exception("bgzip writer can't keep up. Goodbye")
-
-
 class AsyncBGZipWriter(BGZipWriter):
     def __init__(self, fileobj, *args, **kwargs):
         super().__init__(fileobj, *args, **kwargs)
         self._executor = ThreadPoolExecutor(max_workers=1)
-        self._futures = set()
+        self._futures = list()
 
     def _deflate_and_write(self, data):
+        if 2 <= len(self._futures):
+            for _ in as_completed(self._futures[:1]):
+                pass
         f = self._executor.submit(super()._deflate_and_write, data)
+        self._futures.append(f)
         f.add_done_callback(self._result)
-        self._futures.add(f)
 
     def _result(self, future):
-        future.result()
         self._futures.remove(future)
-        async_writer_wait_func(len(self._futures))
+        future.result()
 
     def close(self):
         if self._input_buffer:
