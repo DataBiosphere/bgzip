@@ -20,9 +20,7 @@ bgzip/version.py: setup.py
 	echo "__version__ = '$$(python setup.py --version)'" > $@
 
 clean:
-	-rm -rf bgzip_utils/bgzip_utils.c
-	-rm -rf build dist
-	-rm -rf *.egg-info
+	git clean -dfx
 
 bgzip_utils.c: clean
 	cython bgzip_utils/bgzip_utils.pyx
