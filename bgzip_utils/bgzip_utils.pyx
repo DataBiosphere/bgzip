@@ -16,9 +16,10 @@ cdef enum:
 
 
 cdef enum bgzip_err:
-    BGZIP_CRC_MISMATCH = -7
+    BGZIP_CRC_MISMATCH = -8
     BGZIP_ZLIB_INITIALIZATION_ERROR
     BGZIP_BLOCK_SIZE_MISMATCH
+    BGZIP_BLOCK_SIZE_NEGATIVE
     BGZIP_ZLIB_ERROR
     BGZIP_MALFORMED_HEADER
     BGZIP_INSUFFICIENT_BYTES
@@ -163,14 +164,14 @@ cdef bgzip_err read_block(Block * block, BGZipStream *src) nogil:
 
         if b"B" == subfield.id_[0] and b"C" == subfield.id_[1]:
             if subfield.length != 2:
-                return BGZIP_BLOCK_SIZE_MISMATCH  # Unexpected subfield length in gzip header
+                return BGZIP_MALFORMED_HEADER
             block.block_size = (<unsigned short *>subfield_data)[0]
 
     if 0 != extra_len:
-        return BGZIP_BLOCK_SIZE_MISMATCH  # Unexpected header length
+        return BGZIP_BLOCK_SIZE_MISMATCH
 
     if 0 >= block.block_size:
-        return BGZIP_BLOCK_SIZE_MISMATCH  # Negative or missing block size
+        return BGZIP_BLOCK_SIZE_NEGATIVE
 
     block.next_in = src.next_in
     block.deflated_size = 1 + block.block_size - sizeof(BlockHeader) - head.extra_len - sizeof(BlockTailer)
@@ -236,6 +237,7 @@ def decompress_into(bytes src_buff, bytearray dst_buff, int num_threads):
                     raise BGZIPException("zlib error encountered during inflation")
             else:
                 with gil:
+                    # TODO: Improve message when error reporting becomes more precise
                     raise BGZIPException()
 
     return bytes_read
