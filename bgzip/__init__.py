@@ -4,7 +4,8 @@ import multiprocessing
 from math import floor, ceil
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-from . import bgzip_utils  # type: ignore
+from bgzip import bgzip_utils  # type: ignore
+from bgzip.bgzip_utils import BGZIPException, BGZIPMalformedHeaderException
 
 
 available_cores = multiprocessing.cpu_count()
@@ -155,8 +156,8 @@ class BGZipAsyncReaderPreAllocated(BGZipReaderPreAllocated):
         self._futures.remove(f)
 
     def _wait_for_futures(self):
-        for _ in as_completed(self._futures[0:]):
-            pass
+        for f in as_completed(self._futures[0:]):
+            f.result()
 
     def read(self, size):
         if size <= self._bytes_available:
