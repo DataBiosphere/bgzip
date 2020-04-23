@@ -34,6 +34,12 @@ class TestBGZipReader(unittest.TestCase):
 
         self.assertEqual(a, expected_data)
 
+    def test_read_non_block_gzipped(self):
+        with open("tests/fixtures/non_block_gzipped.vcf.gz", "rb") as raw:
+            with self._get_reader(raw) as fh:
+                with self.assertRaises(bgzip.BGZIPMalformedHeaderException):
+                    fh.read(1)
+
     def test_read_all(self):
         with open("tests/fixtures/partial.vcf.gz", "rb") as raw:
             with gzip.GzipFile(fileobj=raw) as fh:
