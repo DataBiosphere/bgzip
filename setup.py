@@ -14,10 +14,10 @@ else:
 
 if "Darwin" == platform.system():
     extra_compile_args = ["-O3", "-Xpreprocessor", "-fopenmp"]
-    extra_link_args=["-lomp"]
+    extra_link_args = ["-lomp"]
 else:
     extra_compile_args = ["-O3", "-fopenmp"]
-    extra_link_args=["-fopenmp"]
+    extra_link_args = ["-fopenmp"]
 
 
 extensions = [
