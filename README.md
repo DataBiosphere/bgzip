@@ -14,7 +14,17 @@ with open("my_bgzipped_file.gz", "wb") as raw:
 ```
 
 ## Installation
+
+```
 pip install bgzip
+```
+
+#### Requirements
+bgzip requires [openmp](https://github.com/llvm/llvm-project/tree/master/openmp). On MacOS
+it can be installed with:
+```
+brew install openmp
+```
 
 ## Links
 Project home page [GitHub](https://github.com/xbrianh/bgzip)  

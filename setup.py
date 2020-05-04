@@ -1,5 +1,6 @@
-import glob
 import os
+import glob
+import platform
 from setuptools import setup, find_packages
 from distutils.extension import Extension
 
@@ -10,22 +11,34 @@ if os.environ.get("BUILD_WITH_CYTHON"):
 else:
     ext = ".c"
 
+
+if "Darwin" == platform.system():
+    extra_compile_args = ["-O3", "-Xpreprocessor", "-fopenmp"]
+    extra_link_args = ["-lomp"]
+else:
+    extra_compile_args = ["-O3", "-fopenmp"]
+    extra_link_args = ["-fopenmp"]
+
+
 extensions = [
     Extension(
         name="bgzip.bgzip_utils",
         sources=[f"bgzip_utils/bgzip_utils{ext}"],
         libraries=["z"],
-        extra_compile_args=['-O3', '-fopenmp'],
-        extra_link_args=['-fopenmp'],
+        extra_compile_args=extra_compile_args,
+        extra_link_args=extra_link_args,
     )
 ]
+
 
 if os.environ.get("BUILD_WITH_CYTHON"):
     from Cython.Build import cythonize
     extensions = cythonize(extensions)
 
+
 with open("README.md") as fh:
     long_description = fh.read()
+
 
 setup(
     name='bgzip',
@@ -42,7 +55,7 @@ setup(
     scripts=glob.glob('scripts/*'),
     zip_safe=False,
     install_requires=install_requires,
-    platforms=['MacOS X', 'Posix'],
+    platforms=['Posix', 'MacOS X'],
     test_suite='test',
     classifiers=[
         'Intended Audience :: Developers',
