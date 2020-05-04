@@ -28,13 +28,13 @@ bgzip_utils.c: clean
 bgzip_utils: clean
 	BUILD_WITH_CYTHON=1 python setup.py build_ext --inplace
 
-sdist: bgzip_utils.c
-	python setup.py sdist
-
 build: version clean
 	BUILD_WITH_CYTHON=1 python setup.py bdist_wheel
+
+sdist: bgzip_utils.c
+	python setup.py sdist
 
 install: build
 	pip install --upgrade dist/*.whl
 
-.PHONY: test lint mypy tests sdist clean build install
+.PHONY: test lint mypy tests clean build sdist install

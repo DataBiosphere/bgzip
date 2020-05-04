@@ -1,2 +1,4 @@
 include requirements.txt
+include bgzip_utils/*.pyx bgzip_utils/*.pxd
 include README.md
+include pyproject.toml

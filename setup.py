@@ -4,13 +4,8 @@ import platform
 from setuptools import setup, find_packages
 from distutils.extension import Extension
 
+
 install_requires = [line.rstrip() for line in open(os.path.join(os.path.dirname(__file__), "requirements.txt"))]
-
-if os.environ.get("BUILD_WITH_CYTHON"):
-    ext = ".pyx"
-else:
-    ext = ".c"
-
 
 if "Darwin" == platform.system():
     extra_compile_args = ["-O3", "-Xpreprocessor", "-fopenmp"]
@@ -19,26 +14,23 @@ else:
     extra_compile_args = ["-O3", "-fopenmp"]
     extra_link_args = ["-fopenmp"]
 
-
+file_ext = "pyx" if os.environ.get("BUILD_WITH_CYTHON") else "c"
 extensions = [
     Extension(
         name="bgzip.bgzip_utils",
-        sources=[f"bgzip_utils/bgzip_utils{ext}"],
+        sources=[f"bgzip_utils/bgzip_utils.{file_ext}"],
         libraries=["z"],
         extra_compile_args=extra_compile_args,
         extra_link_args=extra_link_args,
     )
 ]
 
-
 if os.environ.get("BUILD_WITH_CYTHON"):
     from Cython.Build import cythonize
     extensions = cythonize(extensions)
 
-
 with open("README.md") as fh:
     long_description = fh.read()
-
 
 setup(
     name='bgzip',
