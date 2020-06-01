@@ -118,6 +118,7 @@ class TestBGZipWriter(unittest.TestCase):
         with bgzip.BGZipReader(fh_out) as reader:
             reinflated_data = reader.read()
         self.assertEqual(inflated_data[:-1], reinflated_data)
+        self.assertTrue(fh_out.getvalue().endswith(bgzip.bgzip_eof))
 
     def test_pathalogical_write(self):
         fh = io.BytesIO()
