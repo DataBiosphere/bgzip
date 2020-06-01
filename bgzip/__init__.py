@@ -220,8 +220,8 @@ class BGZipWriter(io.IOBase):
     def close(self):
         if self._input_buffer:
             self._compress(process_all_chunks=True)
-        self.fileobj.flush()
         self.fileobj.write(bgzip_eof)
+        self.fileobj.flush()
 
 
 class AsyncBGZipWriter(BGZipWriter):
@@ -251,8 +251,8 @@ class AsyncBGZipWriter(BGZipWriter):
         if self._input_buffer:
             self._compress(process_all_chunks=True)
         self._executor.shutdown()
+        self.fileobj.write(bgzip_eof)
         try:
             self.fileobj.flush()
         except BlockingIOError:
             pass
-        self.fileobj.write(bgzip_eof)
