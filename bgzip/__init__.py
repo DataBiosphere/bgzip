@@ -11,6 +11,11 @@ from bgzip.bgzip_utils import BGZIPException, BGZIPMalformedHeaderException
 available_cores = multiprocessing.cpu_count()
 
 
+# samtools format specs:
+# https://samtools.github.io/hts-specs/SAMv1.pdf
+bgzip_eof = bytes.fromhex("1f8b08040000000000ff0600424302001b0003000000000000000000")
+
+
 class BGZipReader(io.IOBase):
     def __init__(self, fileobj: typing.IO, num_threads: int=available_cores, raw_read_chunk_size: int=256 * 1024):
         self.fileobj = fileobj
@@ -215,6 +220,7 @@ class BGZipWriter(io.IOBase):
     def close(self):
         if self._input_buffer:
             self._compress(process_all_chunks=True)
+        self.fileobj.write(bgzip_eof)
         self.fileobj.flush()
 
 
@@ -245,6 +251,7 @@ class AsyncBGZipWriter(BGZipWriter):
         if self._input_buffer:
             self._compress(process_all_chunks=True)
         self._executor.shutdown()
+        self.fileobj.write(bgzip_eof)
         try:
             self.fileobj.flush()
         except BlockingIOError:
