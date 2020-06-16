@@ -34,12 +34,20 @@ with open("README.md") as fh:
     long_description = fh.read()
 
 def get_version():
-    p = subprocess.run(["git", "describe", "--tags", "--match", "v*.*.*"], stdout=subprocess.PIPE)
-    out = p.stdout.decode("ascii").strip()
-    if "-" in out:
-        out = out.split("-", 1)[0]
-    assert out.startswith("v")
-    return out[1:]
+    filepath = os.path.join(os.path.dirname(__file__), "bgzip", "version.py")
+    if os.path.isfile(filepath):
+        with open(filepath) as fh:
+            version = dict()
+            exec(fh.read().strip(), version)
+            return version['__version__']
+    else:
+        p = subprocess.run(["git", "describe", "--tags", "--match", "v*.*.*"], stdout=subprocess.PIPE)
+        p.check_returncode()
+        out = p.stdout.decode("ascii").strip()
+        if "-" in out:
+            out = out.split("-", 1)[0]
+        assert out.startswith("v")
+        return out[1:]
 
 setup(
     name='bgzip',
