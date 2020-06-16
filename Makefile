@@ -28,10 +28,10 @@ bgzip_utils.c: clean
 bgzip_utils: clean
 	BUILD_WITH_CYTHON=1 python setup.py build_ext --inplace
 
-build: version clean
+build: clean version
 	BUILD_WITH_CYTHON=1 python setup.py bdist_wheel
 
-sdist: bgzip_utils.c
+sdist: clean version bgzip_utils.c
 	python setup.py sdist
 
 install: build
