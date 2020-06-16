@@ -1,6 +1,7 @@
 import os
 import glob
 import platform
+import subprocess
 from setuptools import setup, find_packages
 from distutils.extension import Extension
 
@@ -32,9 +33,17 @@ if os.environ.get("BUILD_WITH_CYTHON"):
 with open("README.md") as fh:
     long_description = fh.read()
 
+def get_version():
+    p = subprocess.run(["git", "describe", "--tags", "--match", "v*.*.*"], stdout=subprocess.PIPE)
+    out = p.stdout.decode("ascii").strip()
+    if "-" in out:
+        out = out.split("-", 1)[0]
+    assert out.startswith("v")
+    return out[1:]
+
 setup(
     name='bgzip',
-    version='0.3.3',
+    version=get_version(),
     description='Utilities working with blocked gzip streams.',
     long_description=long_description,
     long_description_content_type='text/markdown',
