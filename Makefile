@@ -8,7 +8,7 @@ lint:
 	flake8 $(MODULES) *.py
 
 mypy:
-	mypy --ignore-missing-imports --no-strict-optional $(MODULES)
+	mypy --ignore-missing-imports $(MODULES)
 
 tests:
 	PYTHONWARNINGS=ignore:ResourceWarning coverage run --source=bgzip \
