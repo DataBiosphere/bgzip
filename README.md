@@ -23,7 +23,7 @@ pip install bgzip
 bgzip requires [openmp](https://github.com/llvm/llvm-project/tree/master/openmp). On MacOS
 it can be installed with:
 ```
-brew install openmp
+brew install llvm
 ```
 
 ## Links
