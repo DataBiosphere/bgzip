@@ -213,7 +213,8 @@ class BGZipWriter(io.IOBase):
             number_of_chunks -= batch
 
     def write(self, data):
-        self._input_buffer.extend(data)
+        _data = data.encode("utf-8") if type(data) is str else data
+        self._input_buffer.extend(_data)
         if len(self._input_buffer) > self.batch_size * bgzip_utils.block_data_inflated_size:
             self._compress()
 
