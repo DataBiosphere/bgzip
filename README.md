@@ -5,11 +5,11 @@ Cython is used under the hood to bypass Python's GIL and provide fast, paralleli
 
 ```
 with open("my_bgzipped_file.gz", "rb") as raw:
-	with bgzip.Reader(raw) as fh:
+	with bgzip.BGZipReader(raw) as fh:
 		data = fh.read(number_of_bytes)
 
 with open("my_bgzipped_file.gz", "wb") as raw:
-	with bgzip.Writer(raw) as fh:
+	with bgzip.BGZipWriter(raw) as fh:
 		fh.write(my_data)
 ```
 
