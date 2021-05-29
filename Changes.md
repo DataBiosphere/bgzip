@@ -1,3 +1,9 @@
+# Changes for v0.4.0 (2021-05-29)
+Update README.md (#22)
+update readme (#21)
+Add comments describing versioning (#18)
+Enable mypy strict optional (#20)
+
 # Changes for v0.3.5 (2020-06-16)
 Fix versioning for wheel (#17)
 
