@@ -4,6 +4,9 @@ MODULES=bgzip tests
 
 test: lint mypy bgzip_utils tests
 
+profile: bgzip_utils
+	python dev_scripts/profile.py
+
 lint:
 	flake8 $(MODULES) *.py
 
@@ -37,4 +40,4 @@ sdist: clean version bgzip_utils.c
 install: build
 	pip install --upgrade dist/*.whl
 
-.PHONY: test lint mypy tests clean build sdist install
+.PHONY: test profile lint mypy tests clean build sdist install
