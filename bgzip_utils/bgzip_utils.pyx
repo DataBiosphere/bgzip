@@ -175,7 +175,7 @@ cdef bgzip_err read_block(Block * block, BGZipStream *src) nogil:
     block.crc = tail.crc
     block.inflated_size = tail.inflated_size
 
-def decompress_into(bytes src_buff, object dst_buff_obj, unsigned int offset, int num_threads):
+def inflate_into(bytes src_buff, object dst_buff_obj, unsigned int offset, int num_threads):
     """
     Inflate bytes from `src_buff` into `dst_buff`
     """
