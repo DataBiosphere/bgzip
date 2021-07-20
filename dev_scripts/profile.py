@@ -61,6 +61,21 @@ def profile_read():
                         d.release()
                 assert UNCOMPRESSED_LENGTH == len(data)
 
+def profile_iter_blocks():
+    with open(VCF_FILEPATH, "rb") as raw:
+        with profile("gzip read"):
+            with gzip.GzipFile(fileobj=raw) as fh:
+                data = fh.read()
+            assert UNCOMPRESSED_LENGTH == len(data)
+
+    for num_threads in range(1, 1 + cpu_count()):
+        with open(VCF_FILEPATH, "rb") as raw:
+            with profile(f"BGZipReader iter_blocks (num_threads={num_threads})"):
+                data = bytearray()
+                for d in bgzip.BGZipReader.iter_blocks(raw, num_threads=num_threads):
+                    data.extend(d)
+                assert UNCOMPRESSED_LENGTH == len(data)
+
 def profile_write():
     with open(VCF_FILEPATH, "rb") as raw:
         with gzip.GzipFile(fileobj=raw) as fh:
@@ -79,5 +94,7 @@ def profile_write():
 
 if __name__ == "__main__":
     profile_read()
+    print()
+    profile_iter_blocks()
     print()
     profile_write()

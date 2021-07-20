@@ -35,9 +35,9 @@ class BGZipReader(io.RawIOBase):
     def _fetch_and_inflate(self):
         while True:
             self._input_data += self.fileobj.read(self.raw_read_chunk_size)
-            bytes_read, bytes_inflated = bgu.inflate_into(self._input_data,
-                                                          self._inflate_buf[self._start:],
-                                                          num_threads=self.num_threads)
+            bytes_read, bytes_inflated, _ = bgu.inflate_into(self._input_data,
+                                                             self._inflate_buf[self._start:],
+                                                             num_threads=self.num_threads)
             if self._input_data and not bytes_inflated:
                 # Not enough space at end of buffer, reset indices
                 assert self._start == self._stop, "Read error. Please contact bgzip maintainers."
@@ -95,6 +95,37 @@ class BGZipReader(io.RawIOBase):
         super().close()
         if hasattr(self, "_buffered"):
             self._buffered.close()
+
+    @classmethod
+    def iter_blocks(cls,
+                    fileobj: IO,
+                    buffer_size: int=DEFAULT_DECOMPRESS_BUFFER_SZ,
+                    num_threads=cpu_count(),
+                    raw_read_chunk_size=256 * 1024):
+        start = stop = total_bytes_read = total_bytes_inflated = 0
+        input_data = bytes()
+        inflated_buffer = memoryview(bytearray(buffer_size))
+        while True:
+            input_data += fileobj.read(raw_read_chunk_size)
+            bytes_read, bytes_inflated, blocks = bgu.inflate_into(input_data,
+                                                                  inflated_buffer[start:],
+                                                                  num_threads=num_threads)
+            if input_data and not bytes_inflated:
+                assert start == stop, "Read error. Please contact bgzip maintainers."
+                start = stop = 0
+            elif bytes_inflated:
+                for b in blocks:
+                    offset = b.inflated_offset
+                    view = inflated_buffer[start + offset: start + offset + b.inflated_size]
+                    try:
+                        yield view
+                    finally:
+                        view.release()
+                total_bytes_read += bytes_read
+                total_bytes_inflated += bytes_inflated
+                input_data = input_data[bytes_read:]
+            else:
+                break
 
 class BGZipWriter(io.IOBase):
     def __init__(self, fileobj: IO, batch_size: int=2000, num_threads: int=cpu_count()):

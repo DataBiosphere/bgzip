@@ -31,6 +31,18 @@ class TestBGZipReader(unittest.TestCase):
                     d.release()
         self.assertEqual(self.expected_data, data)
 
+    def test_iter_blocks(self):
+        with open("tests/fixtures/partial.vcf.gz", "rb") as raw:
+            with gzip.GzipFile(fileobj=raw) as fh:
+                expected_data = fh.read()
+
+        data = bytes()
+        with open("tests/fixtures/partial.vcf.gz", "rb") as raw:
+            for b in bgzip.BGZipReader.iter_blocks(raw, 1024 * 1024 * 1):
+                data += b
+
+        self.assertEqual(expected_data, data)
+
     def test_empty(self):
         with bgzip.BGZipReader(io.BytesIO()) as fh:
             d = fh.read(1024)
