@@ -3,8 +3,8 @@ import io
 import os
 import sys
 import time
-import unittest
 import gzip
+import unittest
 from random import randint
 from contextlib import AbstractContextManager
 
@@ -15,30 +15,24 @@ import bgzip
 
 
 class TestBGZipReader(unittest.TestCase):
-    def _get_reader(self, handle):
-        return bgzip.BGZipReader(handle)
-
     def test_read(self):
         with open("tests/fixtures/partial.vcf.gz", "rb") as raw:
             with gzip.GzipFile(fileobj=raw) as fh:
                 expected_data = fh.read()
 
         with open("tests/fixtures/partial.vcf.gz", "rb") as raw:
-            with self._get_reader(raw) as fh:
+            with bgzip.BGZipReader(raw) as fh:
                 a = bytearray()
                 while True:
                     data = fh.read(randint(1024 * 1024 * 1, 1024 * 1024 * 10))
                     if not data:
                         break
-                    a.extend(data)
+                    try:
+                        a.extend(data)
+                    finally:
+                        data.release()
 
         self.assertEqual(a, expected_data)
-
-    def test_read_non_block_gzipped(self):
-        with open("tests/fixtures/non_block_gzipped.vcf.gz", "rb") as raw:
-            with self._get_reader(raw) as fh:
-                with self.assertRaises(bgzip.BGZIPMalformedHeaderException):
-                    fh.read(1)
 
     def test_read_all(self):
         with open("tests/fixtures/partial.vcf.gz", "rb") as raw:
@@ -46,20 +40,31 @@ class TestBGZipReader(unittest.TestCase):
                 expected_data = fh.read()
 
         with open("tests/fixtures/partial.vcf.gz", "rb") as raw:
-            with self._get_reader(raw) as fh:
-                a = fh.read()
+            with bgzip.BGZipReader(raw) as fh:
+                data = bytearray()
+                while True:
+                    d = fh.read(1024 * 1024)
+                    if not d:
+                        break
+                    try:
+                        data += d
+                    finally:
+                        d.release()
 
-        self.assertEqual(a, expected_data[:-1])
+        self.assertEqual(data, expected_data)
 
     def test_read_into_better(self):
         with open("tests/fixtures/partial.vcf.gz", "rb") as raw:
             a = bytearray()
-            with self._get_reader(raw) as fh:
+            with bgzip.BGZipReader(raw) as fh:
                 while True:
                     data = fh.read(30 * 1024 * 1024)
                     if not data:
                         break
-                    a.extend(data)
+                    try:
+                        a.extend(data)
+                    finally:
+                        data.release()
 
         with open("tests/fixtures/partial.vcf.gz", "rb") as raw:
             with gzip.GzipFile(fileobj=raw) as fh:
@@ -67,57 +72,43 @@ class TestBGZipReader(unittest.TestCase):
 
         self.assertEqual(a, b)
 
-
-class TestBGZipReaderPreAllocated(TestBGZipReader):
-    reader_class = bgzip.BGZipReaderPreAllocated
-
-    def _get_reader(self, handle):
-        return self.reader_class(handle, memoryview(bytearray(1024 * 1024 * 50)))
-
-    def test_read_all(self):
-        with open("tests/fixtures/partial.vcf.gz", "rb") as raw:
-            with self._get_reader(raw) as fh:
-                with self.assertRaises(TypeError):
-                    fh.read()
-
     def test_buffers(self):
         with self.subTest("Should be able to pass in bytearray"):
-            self.reader_class(io.BytesIO(), bytearray(b"laskdf"))
+            bgzip.BGZipReader(io.BytesIO(), bytearray(b"laskdf"))
         with self.subTest("Should be able to pass in memoryview to bytearray"):
-            self.reader_class(io.BytesIO(), memoryview(bytearray(b"laskdf")))
+            bgzip.BGZipReader(io.BytesIO(), memoryview(bytearray(b"laskdf")))
         with self.subTest("Should NOT be able to pass in bytes"):
             with self.assertRaises(ValueError):
-                self.reader_class(io.BytesIO(), b"laskdf")
+                bgzip.BGZipReader(io.BytesIO(), b"laskdf")
         with self.subTest("Should NOT be able to pass in memoryview to bytes"):
             with self.assertRaises(ValueError):
-                self.reader_class(io.BytesIO(), b"laskdf")
+                bgzip.BGZipReader(io.BytesIO(), b"laskdf")
         with self.subTest("Should NOT be able to pass in non-bytes-like object"):
             with self.assertRaises(TypeError):
-                self.reader_class(io.BytesIO(), 2)
-
-
-class TestBGZipAsyncReaderPreAllocated(TestBGZipReaderPreAllocated):
-    reader_class = bgzip.BGZipAsyncReaderPreAllocated
-
+                bgzip.BGZipReader(io.BytesIO(), 2)
 
 class TestBGZipWriter(unittest.TestCase):
-    writer_class = bgzip.BGZipWriter
-
     def test_write(self):
         with open("tests/fixtures/partial.vcf.gz", "rb") as raw:
             with gzip.GzipFile(fileobj=raw) as fh:
                 inflated_data = fh.read()
 
         fh_out = io.BytesIO()
-        with self.writer_class(fh_out) as writer:
+        with bgzip.BGZipWriter(fh_out) as writer:
             n = 987345
             writer.write(inflated_data[:n])
             writer.write(inflated_data[n:])
 
         fh_out.seek(0)
         with bgzip.BGZipReader(fh_out) as reader:
-            reinflated_data = reader.read()
-        self.assertEqual(inflated_data[:-1], reinflated_data)
+            reinflated_data = bytearray()
+            while True:
+                d = reader.read(1024 * 1024)
+                if d:
+                    reinflated_data += d
+                else:
+                    break
+        self.assertEqual(inflated_data, reinflated_data)
         self.assertTrue(fh_out.getvalue().endswith(bgzip.bgzip_eof))
 
     def test_pathalogical_write(self):
@@ -125,46 +116,22 @@ class TestBGZipWriter(unittest.TestCase):
         with bgzip.BGZipWriter(fh):
             fh.write(b"")
 
-
-class TestAsyncBGZipWriter(TestBGZipWriter):
-    writer_class = bgzip.AsyncBGZipWriter  # type: ignore
-
-    def test_queue_size(self):
-        fh = io.BytesIO()
-        with self.subTest("should be able to pass in queue_size"):
-            foo = self.writer_class(fh, queue_size=4)
-            self.assertEqual(foo.queue_size, 4)
-        with self.subTest("should NOT be able to pass in non-int queue_size"):
-            with self.assertRaises(ValueError):
-                self.writer_class(fh, queue_size="frank")
-
-
 class TestProfileBGZip(unittest.TestCase):
-    buf = memoryview(bytearray(1024 * 1024 * 50))
-
-    def _get_reader_for_class(self, reader_class, handle, num_threads):
-        if reader_class.__name__ == "BGZipReader":
-            return bgzip.BGZipReader(handle, num_threads=num_threads)
-        else:
-            return reader_class(handle, self.buf, num_threads=num_threads)
-
     def test_profile_read(self):
         print()
-        for reader_class in [bgzip.BGZipReader, bgzip.BGZipReaderPreAllocated, bgzip.BGZipAsyncReaderPreAllocated]:
-            with open("tests/fixtures/partial.vcf.gz", "rb") as raw:
-                with profile("gzip read"):
-                    with gzip.GzipFile(fileobj=raw) as fh:
-                        fh.read()
+        with open("tests/fixtures/partial.vcf.gz", "rb") as raw:
+            with profile("gzip read"):
+                with gzip.GzipFile(fileobj=raw) as fh:
+                    fh.read()
 
-            for num_threads in range(1, 1 + bgzip.available_cores):
+        for num_threads in range(1, 1 + bgzip.available_cores):
+            with profile(f"BGZipReader (num_threads={num_threads})"):
                 with open("tests/fixtures/partial.vcf.gz", "rb") as raw:
-                    reader = self._get_reader_for_class(reader_class, raw, num_threads)
-                    with profile(f"{reader_class.__name__} read (num_threads={num_threads})"):
+                    with bgzip.BGZipReader(raw, num_threads=num_threads) as reader:
                         while True:
                             data = reader.read(randint(1024 * 1024 * 1, 1024 * 1024 * 10))
                             if not data:
                                 break
-            print()
 
     def test_profile_write(self):
         print()
@@ -183,7 +150,6 @@ class TestProfileBGZip(unittest.TestCase):
                     writer.write(inflated_data[:n])
                     writer.write(inflated_data[n:])
         print()
-
 
 class profile(AbstractContextManager):
     """
@@ -216,7 +182,6 @@ class profile(AbstractContextManager):
             self._print(dur)
             return res
         return wrapper
-
 
 if __name__ == '__main__':
     unittest.main()
