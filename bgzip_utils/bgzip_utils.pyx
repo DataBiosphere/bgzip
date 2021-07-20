@@ -2,6 +2,7 @@ import io
 import zlib
 import struct
 from math import ceil
+from collections import namedtuple
 
 from libc.stdlib cimport abort
 from cython.parallel import prange
@@ -55,6 +56,8 @@ cdef struct block_tailer_s:
 
 ctypedef block_s Block
 cdef struct block_s:
+    unsigned int inflated_offset
+    unsigned int deflated_offset
     unsigned int deflated_size
     unsigned int inflated_size
     unsigned int crc
@@ -175,14 +178,16 @@ cdef bgzip_err read_block(Block * block, BGZipStream *src) nogil:
     block.crc = tail.crc
     block.inflated_size = tail.inflated_size
 
+PyBlock = namedtuple("PyBlock", "deflated_offset inflated_offset inflated_size")
+BlockSet = namedtuple("BlockSet", "bytes_read bytes_inflated blocks")
+
 def inflate_into(bytes src_buff, object dst_buff_obj, int num_threads):
     """
     Inflate bytes from `src_buff` into `dst_buff`
     """
-    cdef int i, err
+    cdef int i, block_number, err
     cdef Bytef * out = NULL
     cdef unsigned int bytes_read = 0, bytes_inflated = 0
-    cdef int number_of_blocks = 0
     cdef Block blocks[NUMBER_OF_BLOCKS]
 
     cdef BGZipStream src
@@ -201,8 +206,8 @@ def inflate_into(bytes src_buff, object dst_buff_obj, int num_threads):
     cdef unsigned int avail_out = PySequence_Size(dst_buff)
 
     with nogil:
-        for i in range(NUMBER_OF_BLOCKS):
-            err = read_block(&blocks[i], &src)
+        for block_number in range(NUMBER_OF_BLOCKS):
+            err = read_block(&blocks[block_number], &src)
             if BGZIP_OK == err:
                 pass
             elif BGZIP_INSUFFICIENT_BYTES == err:
@@ -210,21 +215,24 @@ def inflate_into(bytes src_buff, object dst_buff_obj, int num_threads):
             elif BGZIP_MALFORMED_HEADER == err:
                 raise BGZIPMalformedHeaderException("Block gzip magic not found in header.")
             else:
-                raise BGZIPException("decompress 2 error")
-            if avail_out < bytes_inflated + blocks[i].inflated_size:
+                raise BGZIPException("decompress error")
+            if avail_out < bytes_inflated + blocks[block_number].inflated_size:
                 break
-            bytes_read += 1 + blocks[i].block_size
-            bytes_inflated += blocks[i].inflated_size
-            number_of_blocks += 1
+            blocks[block_number].deflated_offset = bytes_read
+            blocks[block_number].inflated_offset = bytes_inflated
+            bytes_read += 1 + blocks[block_number].block_size
+            bytes_inflated += blocks[block_number].inflated_size
 
-        for i in range(number_of_blocks):
+        for i in range(block_number):
             blocks[i].next_out = out
             out += blocks[i].inflated_size
 
-        for i in prange(number_of_blocks, num_threads=num_threads, schedule="dynamic"):
+        for i in prange(block_number, num_threads=num_threads, schedule="dynamic"):
             inflate_block(&blocks[i])
 
-    return bytes_read, bytes_inflated
+    py_blocks = [PyBlock(blocks[i].deflated_offset, blocks[i].inflated_offset, blocks[i].inflated_size)
+                 for i in range(block_number)]
+    return BlockSet(bytes_read, bytes_inflated, py_blocks)
 
 cdef bgzip_err compress_block(Block * block) nogil:
     cdef z_stream zst
