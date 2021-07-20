@@ -14,7 +14,6 @@ cdef enum:
     NUMBER_OF_BLOCKS = 20000
     MAGIC_LENGTH = 4
 
-
 cdef enum bgzip_err:
     BGZIP_CRC_MISMATCH = -8
     BGZIP_ZLIB_INITIALIZATION_ERROR
@@ -26,11 +25,9 @@ cdef enum bgzip_err:
     BGZIP_ERROR
     BGZIP_OK
 
-
 cdef const unsigned char * MAGIC = "\037\213\010\4"
 # cdef Bytef * HEADER = b"\037\213\010\4\0\0\0\0\0\377\6\0\102\103\2\0"
 cdef bytes HEADER = b"\037\213\010\4\0\0\0\0\0\377\6\0\102\103\2\0"
-
 
 ctypedef block_header_s BlockHeader
 cdef struct block_header_s:
@@ -40,12 +37,10 @@ cdef struct block_header_s:
     unsigned char os_type
     unsigned short extra_len
 
-
 ctypedef block_header_subfield_s BlockHeaderSubfield
 cdef struct block_header_subfield_s:
     unsigned char id_[2]
     unsigned short length
-
 
 ctypedef block_header_bgzip_subfield_s BlockHeaderBGZipSubfield
 cdef struct block_header_bgzip_subfield_s:
@@ -53,12 +48,10 @@ cdef struct block_header_bgzip_subfield_s:
     unsigned short length
     unsigned short block_size
 
-
 ctypedef block_tailer_s BlockTailer
 cdef struct block_tailer_s:
     unsigned int crc
     unsigned int inflated_size
-
 
 ctypedef block_s Block
 cdef struct block_s:
@@ -71,19 +64,16 @@ cdef struct block_s:
     Bytef * next_out
     unsigned int avail_out
 
-
 ctypedef bgzip_stream_s BGZipStream
 cdef struct bgzip_stream_s:
     unsigned int available_in
     Bytef *next_in
-
 
 class BGZIPException(Exception):
     pass
 
 class BGZIPMalformedHeaderException(BGZIPException):
     pass
-
 
 cdef bgzip_err inflate_block(Block * block) nogil:
     cdef z_stream zst
@@ -118,7 +108,6 @@ cdef bgzip_err inflate_block(Block * block) nogil:
     # Difference betwwen `compress` and `deflate`:
     # https://stackoverflow.com/questions/10166122/zlib-differences-between-the-deflate-and-compress-functions
 
-
 cdef void * ref_and_advance(BGZipStream * rb, unsigned int member_size, bgzip_err *err) nogil:
     if rb.available_in  < member_size:
         err[0] = BGZIP_INSUFFICIENT_BYTES
@@ -129,7 +118,6 @@ cdef void * ref_and_advance(BGZipStream * rb, unsigned int member_size, bgzip_er
         rb.available_in  -= member_size
         err[0] = BGZIP_OK
         return ret_val
-
 
 cdef bgzip_err read_block(Block * block, BGZipStream *src) nogil:
     cdef unsigned int i
@@ -187,63 +175,7 @@ cdef bgzip_err read_block(Block * block, BGZipStream *src) nogil:
     block.crc = tail.crc
     block.inflated_size = tail.inflated_size
 
-
-def decompress_into(bytes src_buff, bytearray dst_buff, int num_threads):
-    """
-    Inflate bytes from `src_buff` into `dst_buff`, resizing `dst_buff` as needed.
-    """
-    cdef int i, err
-    cdef PyObject * dst = <PyObject *>dst_buff
-    cdef Bytef * out = NULL
-    cdef unsigned int offset = len(dst_buff)
-    cdef int bytes_read = 0, inflated_size = 0
-    cdef int number_of_blocks = 0
-    cdef Block blocks[NUMBER_OF_BLOCKS]
-
-    cdef BGZipStream src
-    src.next_in = src_buff
-    src.available_in  = len(src_buff)
-
-    with nogil:
-        for i in range(NUMBER_OF_BLOCKS):
-            err = read_block(&blocks[i], &src)
-            if BGZIP_OK == err:
-                pass
-            elif BGZIP_INSUFFICIENT_BYTES == err:
-                break
-            elif BGZIP_MALFORMED_HEADER == err:
-                raise BGZIPMalformedHeaderException("Block gzip magic not found in header.")
-            else:
-                raise BGZIPException("decompression error")
-            bytes_read += 1 + blocks[i].block_size
-            inflated_size += blocks[i].inflated_size
-            number_of_blocks += 1
-
-    PyByteArray_Resize(dst, offset + inflated_size)
-    out = <Bytef *>PyByteArray_AS_STRING(dst)
-    out += offset
-
-    with nogil:
-        for i in range(number_of_blocks):
-            blocks[i].next_out = out
-            out += blocks[i].inflated_size
-
-        for i in prange(number_of_blocks, num_threads=num_threads, schedule="dynamic"):
-            err = inflate_block(&blocks[i])
-            if BGZIP_OK == err:
-                pass
-            elif err == BGZIP_ZLIB_ERROR:
-                with gil:
-                    raise BGZIPException("zlib error encountered during inflation")
-            else:
-                with gil:
-                    # TODO: Improve message when error reporting becomes more precise
-                    raise BGZIPException()
-
-    return bytes_read
-
-
-def decompress_into_2(bytes src_buff, object dst_buff_obj, unsigned int offset, int num_threads):
+def decompress_into(bytes src_buff, object dst_buff_obj, unsigned int offset, int num_threads):
     """
     Inflate bytes from `src_buff` into `dst_buff`
     """
@@ -294,7 +226,6 @@ def decompress_into_2(bytes src_buff, object dst_buff_obj, unsigned int offset, 
             inflate_block(&blocks[i])
 
     return bytes_read, bytes_inflated
-
 
 cdef bgzip_err compress_block(Block * block) nogil:
     cdef z_stream zst
@@ -349,12 +280,10 @@ cdef bgzip_err compress_block(Block * block) nogil:
 
     return BGZIP_OK
 
-
 cdef unsigned int _block_data_inflated_size = 65280
 cdef unsigned int _block_metadata_size = sizeof(BlockHeader) + sizeof(BlockHeaderBGZipSubfield) + sizeof(BlockTailer)
 block_data_inflated_size = _block_data_inflated_size
 block_metadata_size = _block_metadata_size
-
 
 def compress_chunks(input_chunks, int num_threads):
     cdef int i, chunk_size, compressed_chunk_guess_size
