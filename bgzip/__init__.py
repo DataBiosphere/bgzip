@@ -1,8 +1,8 @@
 import io
-import typing
 import multiprocessing
 from math import floor, ceil
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from typing import IO, Optional
 
 from bgzip import bgzip_utils  # type: ignore
 from bgzip.bgzip_utils import BGZIPException, BGZIPMalformedHeaderException
@@ -10,62 +10,29 @@ from bgzip.bgzip_utils import BGZIPException, BGZIPMalformedHeaderException
 
 available_cores = multiprocessing.cpu_count()
 
-
 # samtools format specs:
 # https://samtools.github.io/hts-specs/SAMv1.pdf
 bgzip_eof = bytes.fromhex("1f8b08040000000000ff0600424302001b0003000000000000000000")
 
-
-class BGZipReader(io.IOBase):
-    def __init__(self, fileobj: typing.IO, num_threads: int=available_cores, raw_read_chunk_size: int=256 * 1024):
-        self.fileobj = fileobj
-        self._input_data = bytes()
-        self._buffer = bytearray()
-        self._pos = 0
-        self.num_threads = num_threads
-        self.raw_read_chunk_size = raw_read_chunk_size
-
-    def readable(self):
-        return True
-
-    def read(self, size: int=-1):
-        while -1 == size or len(self._buffer) - self._pos < size:
-            if self._pos:
-                del self._buffer[:self._pos]
-                self._pos = 0
-            self._input_data += self.fileobj.read(self.raw_read_chunk_size)
-            if not self._input_data:
-                break
-            bytes_read = bgzip_utils.decompress_into(self._input_data,
-                                                     self._buffer,
-                                                     num_threads=self.num_threads)
-            self._input_data = self._input_data[bytes_read:]
-        ret_val = self._buffer[self._pos:self._pos + size]
-        self._pos += size
-        return ret_val
-
-    def readinto(self, buff):
-        d = self.read(len(buff))
-        buff[:len(d)] = d
-        return len(d)
-
+DEFAULT_DECOMPRESS_BUFFER_SZ = 1024 * 1024 * 50
 
 class Window:
     def __init__(self, start: int=0, end: int=0):
         self.start = start
         self.end = end
 
-
-class BGZipReaderPreAllocated(BGZipReader):
+class BGZipReader(io.IOBase):
     """
     Inflate data into a pre-allocated buffer. The buffer size will not change, and should be large enough
     to hold at least twice the data of any call to `read`.
     """
     def __init__(self,
-                 fileobj: typing.IO,
-                 buf: memoryview,
+                 fileobj: IO,
+                 buf: Optional[memoryview]=None,
                  num_threads=available_cores,
                  raw_read_chunk_size=256 * 1024):
+        if buf is None:
+            buf = memoryview(bytearray(DEFAULT_DECOMPRESS_BUFFER_SZ))
         if not isinstance(buf, memoryview):
             buf = memoryview(buf)
         if buf.readonly:
@@ -135,52 +102,8 @@ class BGZipReaderPreAllocated(BGZipReader):
             bytes_read += len(mv)
         return bytes_read
 
-
-class BGZipAsyncReaderPreAllocated(BGZipReaderPreAllocated):
-    def __init__(self,
-                 fileobj: typing.IO,
-                 buf: memoryview,
-                 num_threads: int=available_cores,
-                 raw_read_chunk_size: int=256 * 1024,
-                 read_buffer_size: int=1024 * 1024):
-        super().__init__(fileobj, buf, num_threads, raw_read_chunk_size)
-        self._executor = ThreadPoolExecutor(max_workers=1)
-        self._futures = list()  # type: ignore
-        self._read_buffer_size = 1 * 1024 * 1024
-
-    @property
-    def future_size(self):
-        return self._bytes_available + self._read_buffer_size * len(self._futures)
-
-    def _fetch_and_inflate(self, size):
-        f = self._executor.submit(super()._fetch_and_inflate, self._read_buffer_size)
-        self._futures.append(f)
-        f.add_done_callback(self._finalize_future)
-
-    def _finalize_future(self, f):
-        self._futures.remove(f)
-
-    def _wait_for_futures(self):
-        for f in as_completed(self._futures[0:]):
-            f.result()
-
-    def read(self, size):
-        if size <= self._bytes_available:
-            pass
-        elif size <= self.future_size:
-            while size <= self.future_size:
-                self._wait_for_futures()
-        else:
-            desired = size + self._read_buffer_size
-            gap = size - self._bytes_available
-            self._fetch_and_inflate(gap)
-            self._fetch_and_inflate(desired - gap)
-            self._wait_for_futures()
-        return self._read(size)
-
-
 class BGZipWriter(io.IOBase):
-    def __init__(self, fileobj: typing.IO, batch_size: int=2000, num_threads: int=available_cores):
+    def __init__(self, fileobj: IO, batch_size: int=2000, num_threads: int=available_cores):
         self.fileobj = fileobj
         self.batch_size = batch_size
         self._input_buffer = bytearray()
@@ -222,37 +145,3 @@ class BGZipWriter(io.IOBase):
             self._compress(process_all_chunks=True)
         self.fileobj.write(bgzip_eof)
         self.fileobj.flush()
-
-
-class AsyncBGZipWriter(BGZipWriter):
-    def __init__(self, *args, **kwargs):
-        if "queue_size" in kwargs:
-            self.queue_size = int(kwargs['queue_size'])
-            del kwargs['queue_size']
-        else:
-            self.queue_size = 2
-        super().__init__(*args, **kwargs)
-        self._executor = ThreadPoolExecutor(max_workers=1)
-        self._futures = list()
-
-    def _deflate_and_write(self, data):
-        if self.queue_size <= len(self._futures):
-            for _ in as_completed(self._futures[:1]):
-                pass
-        f = self._executor.submit(super()._deflate_and_write, data)
-        self._futures.append(f)
-        f.add_done_callback(self._result)
-
-    def _result(self, future):
-        self._futures.remove(future)
-        future.result()
-
-    def close(self):
-        if self._input_buffer:
-            self._compress(process_all_chunks=True)
-        self._executor.shutdown()
-        self.fileobj.write(bgzip_eof)
-        try:
-            self.fileobj.flush()
-        except BlockingIOError:
-            pass
