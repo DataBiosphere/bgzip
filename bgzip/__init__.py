@@ -28,18 +28,12 @@ class BGZipReader(io.IOBase):
     """
     def __init__(self,
                  fileobj: IO,
-                 buf: Optional[memoryview]=None,
+                 buffer_size: int=DEFAULT_DECOMPRESS_BUFFER_SZ,
                  num_threads=available_cores,
                  raw_read_chunk_size=256 * 1024):
-        if buf is None:
-            buf = memoryview(bytearray(DEFAULT_DECOMPRESS_BUFFER_SZ))
-        if not isinstance(buf, memoryview):
-            buf = memoryview(buf)
-        if buf.readonly:
-            raise ValueError("Expected readable buffer")
         self.fileobj = fileobj
         self._input_data = bytes()
-        self._scratch = buf
+        self._scratch = memoryview(bytearray(buffer_size))
         self._bytes_available = 0
         self.raw_read_chunk_size = raw_read_chunk_size
 

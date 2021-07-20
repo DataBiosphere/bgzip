@@ -70,21 +70,6 @@ class TestBGZipReader(unittest.TestCase):
 
         self.assertEqual(a, b)
 
-    def test_buffers(self):
-        with self.subTest("Should be able to pass in bytearray"):
-            bgzip.BGZipReader(io.BytesIO(), bytearray(b"laskdf"))
-        with self.subTest("Should be able to pass in memoryview to bytearray"):
-            bgzip.BGZipReader(io.BytesIO(), memoryview(bytearray(b"laskdf")))
-        with self.subTest("Should NOT be able to pass in bytes"):
-            with self.assertRaises(ValueError):
-                bgzip.BGZipReader(io.BytesIO(), b"laskdf")
-        with self.subTest("Should NOT be able to pass in memoryview to bytes"):
-            with self.assertRaises(ValueError):
-                bgzip.BGZipReader(io.BytesIO(), b"laskdf")
-        with self.subTest("Should NOT be able to pass in non-bytes-like object"):
-            with self.assertRaises(TypeError):
-                bgzip.BGZipReader(io.BytesIO(), 2)
-
 class TestBGZipWriter(unittest.TestCase):
     def test_write(self):
         with open("tests/fixtures/partial.vcf.gz", "rb") as raw:
