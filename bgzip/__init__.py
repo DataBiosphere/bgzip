@@ -60,10 +60,10 @@ class BGZipReader(io.IOBase):
             self._input_data += self.fileobj.read(self.raw_read_chunk_size)
             if not self._input_data:
                 break
-            bytes_read, bytes_inflated = bgzip_utils.decompress_into(self._input_data,
-                                                                     self._scratch,
-                                                                     self._windows[-1].end,
-                                                                     num_threads=self.num_threads)
+            bytes_read, bytes_inflated = bgzip_utils.inflate_into(self._input_data,
+                                                                  self._scratch,
+                                                                  self._windows[-1].end,
+                                                                  num_threads=self.num_threads)
             if self._input_data and not bytes_inflated:
                 self._windows.append(Window())
             else:
