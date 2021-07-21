@@ -19,18 +19,23 @@ class TestBGZipReader(unittest.TestCase):
                 expected_data = fh.read()
 
         with open("tests/fixtures/partial.vcf.gz", "rb") as raw:
-            with bgzip.BGZipReader(raw) as fh:
-                a = bytearray()
+            with bgzip.BGZipReader(raw, 1024 * 1024 * 1) as fh:
+                data = bytearray()
                 while True:
-                    data = fh.read(randint(1024 * 1024 * 1, 1024 * 1024 * 10))
-                    if not data:
+                    d = fh.read(randint(1024 * 1, 1024 * 1024 * 1024))
+                    if not d:
                         break
                     try:
-                        a.extend(data)
+                        data += d
                     finally:
-                        data.release()
+                        d.release()
 
-        self.assertEqual(a, expected_data)
+        self.assertEqual(expected_data, data)
+
+    def test_empty(self):
+        with bgzip.BGZipReader(io.BytesIO()) as fh:
+            d = fh.read(1024)
+            self.assertEqual(0, len(d))
 
     def test_read_all(self):
         with open("tests/fixtures/partial.vcf.gz", "rb") as raw:
@@ -48,27 +53,25 @@ class TestBGZipReader(unittest.TestCase):
                         data += d
                     finally:
                         d.release()
-
         self.assertEqual(data, expected_data)
 
-    def test_read_into_better(self):
-        with open("tests/fixtures/partial.vcf.gz", "rb") as raw:
-            a = bytearray()
-            with bgzip.BGZipReader(raw) as fh:
-                while True:
-                    data = fh.read(30 * 1024 * 1024)
-                    if not data:
-                        break
-                    try:
-                        a.extend(data)
-                    finally:
-                        data.release()
-
+    def test_read_into(self):
         with open("tests/fixtures/partial.vcf.gz", "rb") as raw:
             with gzip.GzipFile(fileobj=raw) as fh:
-                b = fh.read()
+                expected_data = fh.read()
 
-        self.assertEqual(a, b)
+        with open("tests/fixtures/partial.vcf.gz", "rb") as raw:
+            data = bytearray()
+            with bgzip.BGZipReader(raw) as fh:
+                while True:
+                    d = fh.read(30 * 1024 * 1024)
+                    if not d:
+                        break
+                    try:
+                        data += d
+                    finally:
+                        d.release()
+        self.assertEqual(expected_data, data)
 
 class TestBGZipWriter(unittest.TestCase):
     def test_write(self):
