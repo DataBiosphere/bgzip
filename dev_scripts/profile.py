@@ -48,8 +48,8 @@ def profile_read():
 
     for num_threads in range(1, 1 + cpu_count()):
         with open(VCF_FILEPATH, "rb") as raw:
-            reader = bgzip.BGZipReader(raw, num_threads=num_threads)
-            with profile(f"{type(reader).__name__} read (num_threads={num_threads})"):
+            with profile(f"BGZipReader read (num_threads={num_threads})"):
+                reader = bgzip.BGZipReader(raw, num_threads=num_threads)
                 data = bytearray()
                 while True:
                     d = reader.read(randint(1024 * 1024 * 1, 1024 * 1024 * 10))
