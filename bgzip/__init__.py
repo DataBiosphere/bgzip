@@ -1,9 +1,7 @@
 import io
-import multiprocessing
 from math import floor, ceil
 from multiprocessing import cpu_count
-from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import IO, Optional
+from typing import IO
 
 from bgzip import bgzip_utils  # type: ignore
 from bgzip.bgzip_utils import BGZIPException, BGZIPMalformedHeaderException
