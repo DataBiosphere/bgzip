@@ -25,10 +25,8 @@ class TestBGZipReader(unittest.TestCase):
                     d = fh.read(randint(1024 * 1, 1024 * 1024 * 1024))
                     if not d:
                         break
-                    try:
-                        data += d
-                    finally:
-                        d.release()
+                    data.extend(d)
+                    d.release()
 
         self.assertEqual(expected_data, data)
 
@@ -49,10 +47,8 @@ class TestBGZipReader(unittest.TestCase):
                     d = fh.read(1024 * 1024)
                     if not d:
                         break
-                    try:
-                        data += d
-                    finally:
-                        d.release()
+                    data.extend(d)
+                    d.release()
         self.assertEqual(data, expected_data)
 
     def test_read_into(self):
@@ -67,10 +63,8 @@ class TestBGZipReader(unittest.TestCase):
                     d = fh.read(30 * 1024 * 1024)
                     if not d:
                         break
-                    try:
-                        data += d
-                    finally:
-                        d.release()
+                    data.extend(d)
+                    d.release()
         self.assertEqual(expected_data, data)
 
 class TestBGZipWriter(unittest.TestCase):
