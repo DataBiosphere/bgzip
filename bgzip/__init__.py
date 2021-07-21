@@ -1,14 +1,13 @@
 import io
 import multiprocessing
 from math import floor, ceil
+from multiprocessing import cpu_count
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import IO, Optional
 
 from bgzip import bgzip_utils  # type: ignore
 from bgzip.bgzip_utils import BGZIPException, BGZIPMalformedHeaderException
 
-
-available_cores = multiprocessing.cpu_count()
 
 # samtools format specs:
 # https://samtools.github.io/hts-specs/SAMv1.pdf
@@ -29,7 +28,7 @@ class BGZipReader(io.IOBase):
     def __init__(self,
                  fileobj: IO,
                  buffer_size: int=DEFAULT_DECOMPRESS_BUFFER_SZ,
-                 num_threads=available_cores,
+                 num_threads=cpu_count(),
                  raw_read_chunk_size=256 * 1024):
         self.fileobj = fileobj
         self._input_data = bytes()
@@ -97,7 +96,7 @@ class BGZipReader(io.IOBase):
         return bytes_read
 
 class BGZipWriter(io.IOBase):
-    def __init__(self, fileobj: IO, batch_size: int=2000, num_threads: int=available_cores):
+    def __init__(self, fileobj: IO, batch_size: int=2000, num_threads: int=cpu_count()):
         self.fileobj = fileobj
         self.batch_size = batch_size
         self._input_buffer = bytearray()

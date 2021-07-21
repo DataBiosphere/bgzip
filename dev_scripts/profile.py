@@ -5,6 +5,7 @@ import sys
 import time
 import gzip
 from random import randint
+from multiprocessing import cpu_count
 from contextlib import AbstractContextManager
 
 pkg_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))  # noqa
@@ -45,7 +46,7 @@ def profile_read():
                 data = fh.read()
             assert UNCOMPRESSED_LENGTH == len(data)
 
-    for num_threads in range(1, 1 + bgzip.available_cores):
+    for num_threads in range(1, 1 + cpu_count()):
         with open(VCF_FILEPATH, "rb") as raw:
             reader = bgzip.BGZipReader(raw, num_threads=num_threads)
             with profile(f"{type(reader).__name__} read (num_threads={num_threads})"):
@@ -69,7 +70,7 @@ def profile_write():
         with gzip.GzipFile(fileobj=io.BytesIO(), mode="w") as fh:
             fh.write(inflated_data)
 
-    for num_threads in range(1, 1 + bgzip.available_cores):
+    for num_threads in range(1, 1 + cpu_count()):
         with profile(f"bgzip write (num_threads={num_threads})"):
             with bgzip.BGZipWriter(io.BytesIO(), num_threads=num_threads) as writer:
                 n = 987345
