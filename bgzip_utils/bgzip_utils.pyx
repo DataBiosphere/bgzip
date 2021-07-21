@@ -175,7 +175,7 @@ cdef bgzip_err read_block(Block * block, BGZipStream *src) nogil:
     block.crc = tail.crc
     block.inflated_size = tail.inflated_size
 
-def inflate_into(bytes src_buff, object dst_buff_obj, unsigned int offset, int num_threads):
+def inflate_into(bytes src_buff, object dst_buff_obj, int num_threads):
     """
     Inflate bytes from `src_buff` into `dst_buff`
     """
@@ -198,8 +198,7 @@ def inflate_into(bytes src_buff, object dst_buff_obj, unsigned int offset, int n
         raise Exception("dst_buff_obj must be a memoryview instance.")
         # TODO: support bytearray objects
 
-    cdef unsigned int avail_out = PySequence_Size(dst_buff) - offset
-    out += offset
+    cdef unsigned int avail_out = PySequence_Size(dst_buff)
 
     with nogil:
         for i in range(NUMBER_OF_BLOCKS):
