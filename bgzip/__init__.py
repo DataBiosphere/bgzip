@@ -3,8 +3,7 @@ from math import floor, ceil
 from multiprocessing import cpu_count
 from typing import IO
 
-from bgzip import bgzip_utils  # type: ignore
-from bgzip.bgzip_utils import BGZIPException, BGZIPMalformedHeaderException
+from bgzip import bgzip_utils as bgu  # type: ignore
 
 
 # samtools format specs:
@@ -12,11 +11,6 @@ from bgzip.bgzip_utils import BGZIPException, BGZIPMalformedHeaderException
 bgzip_eof = bytes.fromhex("1f8b08040000000000ff0600424302001b0003000000000000000000")
 
 DEFAULT_DECOMPRESS_BUFFER_SZ = 1024 * 1024 * 50
-
-class Window:
-    def __init__(self, start: int=0, end: int=0):
-        self.start = start
-        self.end = end
 
 class BGZipReader(io.IOBase):
     """
@@ -30,57 +24,46 @@ class BGZipReader(io.IOBase):
                  raw_read_chunk_size=256 * 1024):
         self.fileobj = fileobj
         self._input_data = bytes()
-        self._scratch = memoryview(bytearray(buffer_size))
-        self._bytes_available = 0
+        self._inflate_buf = memoryview(bytearray(buffer_size))
+        self._start = self._stop = 0
         self.raw_read_chunk_size = raw_read_chunk_size
-
         self.num_threads = num_threads
-
-        self._windows = []  # type: ignore
 
     def readable(self):
         return True
 
-    def _fetch_and_inflate(self, size: int):
-        # TODO: prevent window overlap.
-        #       does `self._bytes_available < len(self._scratch) / 2` do the trick?
-        while self._bytes_available < size and self._bytes_available < len(self._scratch) / 2:
-            if not self._windows:
-                self._windows.append(Window())
-
+    def _fetch_and_inflate(self):
+        while True:
             self._input_data += self.fileobj.read(self.raw_read_chunk_size)
-            if not self._input_data:
-                break
-            bytes_read, bytes_inflated = bgzip_utils.inflate_into(self._input_data,
-                                                                  self._scratch,
-                                                                  self._windows[-1].end,
-                                                                  num_threads=self.num_threads)
+            bytes_read, bytes_inflated = bgu.inflate_into(self._input_data,
+                                                          self._inflate_buf[self._start:],
+                                                          num_threads=self.num_threads)
             if self._input_data and not bytes_inflated:
-                self._windows.append(Window())
+                # Not enough space at end of buffer, reset indices
+                assert self._start == self._stop, "Read error. Please contact bgzip maintainers."
+                self._start = self._stop = 0
             else:
-                self._bytes_available += bytes_inflated
                 self._input_data = self._input_data[bytes_read:]
-                self._windows[-1].end += bytes_inflated
-                if self._windows[-1].end > len(self._scratch):
-                    raise Exception("not good")
+                self._stop += bytes_inflated
+                break
 
     def _read(self, size: int):
-        start, end = self._windows[0].start, self._windows[0].end
-        size = min(size, end - start)
-        ret_val = self._scratch[start:start + size]
-        self._windows[0].start += len(ret_val)
-        self._bytes_available -= len(ret_val)
-        if self._windows[0].start >= self._windows[0].end:
-            self._windows.pop(0)
+        size = min(size, self._stop - self._start)
+        ret_val = self._inflate_buf[self._start:self._start + size]
+        self._start += len(ret_val)
         return ret_val
 
-    def read(self, size: int):  # type: ignore
+    def read(self, size: int):
         """
-        Return a view to mutable memory. View should be consumed before calling `read` again.
+        Return a view to mutable memory. View should be consumed before calling 'read' again.
         """
         assert size > 0
-        self._fetch_and_inflate(size)
-        return self._read(size)
+        out = self._read(size)
+        if out:
+            return out
+        else:
+            self._fetch_and_inflate()
+            return self._read(size)
 
     def readinto(self, buff):
         sz = len(buff)
@@ -98,21 +81,18 @@ class BGZipWriter(io.IOBase):
         self.fileobj = fileobj
         self.batch_size = batch_size
         self._input_buffer = bytearray()
-        block_size = bgzip_utils.block_data_inflated_size + bgzip_utils.block_metadata_size
-        self._scratch_buffers = [bytearray(block_size) for _ in range(self.batch_size)]
+        block_size = bgu.block_data_inflated_size + bgu.block_metadata_size
+        self._inflate_buf = [bytearray(block_size) for _ in range(self.batch_size)]
         self.num_threads = num_threads
 
     def writable(self):
         return True
 
     def _deflate_and_write(self, data):
-        bgzip_utils.compress_to_stream(data,
-                                       self._scratch_buffers,
-                                       self.fileobj,
-                                       num_threads=self.num_threads)
+        bgu.compress_to_stream(data, self._inflate_buf, self.fileobj, num_threads=self.num_threads)
 
     def _compress(self, process_all_chunks=False):
-        number_of_chunks = len(self._input_buffer) / bgzip_utils.block_data_inflated_size
+        number_of_chunks = len(self._input_buffer) / bgu.block_data_inflated_size
         number_of_chunks = ceil(number_of_chunks) if process_all_chunks else floor(number_of_chunks)
 
         while number_of_chunks:
@@ -120,7 +100,7 @@ class BGZipWriter(io.IOBase):
             if batch < self.batch_size and not process_all_chunks:
                 break
 
-            n = batch * bgzip_utils.block_data_inflated_size
+            n = batch * bgu.block_data_inflated_size
             self._deflate_and_write(memoryview(self._input_buffer)[:n])
             self._input_buffer = self._input_buffer[n:]
 
@@ -128,7 +108,7 @@ class BGZipWriter(io.IOBase):
 
     def write(self, data):
         self._input_buffer.extend(data)
-        if len(self._input_buffer) > self.batch_size * bgzip_utils.block_data_inflated_size:
+        if len(self._input_buffer) > self.batch_size * bgu.block_data_inflated_size:
             self._compress()
 
     def close(self):
