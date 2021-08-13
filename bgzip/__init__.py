@@ -1,7 +1,7 @@
 import io
 from math import floor, ceil
 from multiprocessing import cpu_count
-from typing import IO
+from typing import IO, Generator
 
 from bgzip import bgzip_utils as bgu  # type: ignore
 
@@ -84,6 +84,11 @@ class BGZipReader(io.RawIOBase):
             buff[bytes_read:bytes_read + len(mv)] = mv
             bytes_read += len(mv)
         return bytes_read
+
+    def __iter__(self) -> Generator[bytes, None, None]:
+        with io.BufferedReader(self) as buffered:
+            for line in buffered:
+                yield line
 
 class BGZipWriter(io.IOBase):
     def __init__(self, fileobj: IO, batch_size: int=2000, num_threads: int=cpu_count()):
