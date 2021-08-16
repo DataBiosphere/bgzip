@@ -29,7 +29,7 @@ class BGZipReader(io.IOBase):
         self.raw_read_chunk_size = raw_read_chunk_size
         self.num_threads = num_threads
 
-    def readable(self):
+    def readable(self) -> bool:
         return True
 
     def _fetch_and_inflate(self):
@@ -47,13 +47,13 @@ class BGZipReader(io.IOBase):
                 self._stop += bytes_inflated
                 break
 
-    def _read(self, size: int):
+    def _read(self, size: int) -> memoryview:
         size = min(size, self._stop - self._start)
         ret_val = self._inflate_buf[self._start:self._start + size]
         self._start += len(ret_val)
         return ret_val
 
-    def read(self, size: int):
+    def read(self, size: int) -> memoryview:
         """
         Return a view to mutable memory. View should be consumed before calling 'read' again.
         """
@@ -65,7 +65,7 @@ class BGZipReader(io.IOBase):
             self._fetch_and_inflate()
             return self._read(size)
 
-    def readinto(self, buff):
+    def readinto(self, buff) -> int:
         sz = len(buff)
         bytes_read = 0
         while bytes_read < sz:
