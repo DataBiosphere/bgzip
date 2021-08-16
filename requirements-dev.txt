@@ -2,5 +2,4 @@ flake8
 coverage
 mypy
 twine
-Cython
 -r requirements.txt

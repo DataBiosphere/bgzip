@@ -2,9 +2,9 @@ include common.mk
 
 MODULES=bgzip tests
 
-test: lint mypy bgzip_utils tests
+test: lint mypy tests
 
-profile: bgzip_utils
+profile:
 	python dev_scripts/profile.py
 
 lint:
@@ -25,16 +25,10 @@ bgzip/version.py: setup.py
 clean:
 	git clean -dfx
 
-bgzip_utils.c: clean
-	cython bgzip_utils/bgzip_utils.pyx
-
-bgzip_utils: clean
-	BUILD_WITH_CYTHON=1 python setup.py build_ext --inplace
-
 build: clean version
-	BUILD_WITH_CYTHON=1 python setup.py bdist_wheel
+	python setup.py bdist_wheel
 
-sdist: clean version bgzip_utils.c
+sdist: clean version
 	python setup.py sdist
 
 install: build
