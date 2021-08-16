@@ -12,7 +12,7 @@ bgzip_eof = bytes.fromhex("1f8b08040000000000ff0600424302001b0003000000000000000
 
 DEFAULT_DECOMPRESS_BUFFER_SZ = 1024 * 1024 * 50
 
-class BGZipReader(io.IOBase):
+class BGZipReader(io.RawIOBase):
     """
     Inflate data into a pre-allocated buffer. The buffer size will not change, and should be large enough
     to hold at least twice the data of any call to `read`.
@@ -55,12 +55,24 @@ class BGZipReader(io.IOBase):
         self._start += len(out)
         return out
 
-    def read(self, size: int) -> memoryview:
+    def read(self, size: int=-1) -> memoryview:
         """
         Return a view to mutable memory. View should be consumed before calling 'read' again.
         """
-        assert size > 0
-        return self._read(size)
+        if -1 == size:
+            data = bytearray()
+            while True:
+                try:
+                    d = self._read(1024 ** 3)
+                    if not d:
+                        break
+                    data.extend(d)
+                finally:
+                    d.release()
+            out = memoryview(data)
+        else:
+            out = self._read(size)
+        return out
 
     def readinto(self, buff) -> int:
         sz = len(buff)
