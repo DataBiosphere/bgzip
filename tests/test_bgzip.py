@@ -40,13 +40,7 @@ class TestBGZipReader(unittest.TestCase):
     def test_read_all(self):
         with open("tests/fixtures/partial.vcf.gz", "rb") as raw:
             with bgzip.BGZipReader(raw) as fh:
-                data = bytearray()
-                while True:
-                    d = fh.read(1024 * 1024)
-                    if not d:
-                        break
-                    data.extend(d)
-                    d.release()
+                data = fh.read()
         self.assertEqual(data, self.expected_data)
 
     def test_read_into(self):
