@@ -13,11 +13,13 @@ import bgzip
 
 
 class TestBGZipReader(unittest.TestCase):
-    def test_read(self):
+    @classmethod
+    def setUpClass(cls):
         with open("tests/fixtures/partial.vcf.gz", "rb") as raw:
             with gzip.GzipFile(fileobj=raw) as fh:
-                expected_data = fh.read()
+                cls.expected_data = fh.read()
 
+    def test_read(self):
         with open("tests/fixtures/partial.vcf.gz", "rb") as raw:
             with bgzip.BGZipReader(raw, 1024 * 1024 * 1) as fh:
                 data = bytearray()
@@ -28,7 +30,7 @@ class TestBGZipReader(unittest.TestCase):
                     data.extend(d)
                     d.release()
 
-        self.assertEqual(expected_data, data)
+        self.assertEqual(self.expected_data, data)
 
     def test_empty(self):
         with bgzip.BGZipReader(io.BytesIO()) as fh:
@@ -36,10 +38,6 @@ class TestBGZipReader(unittest.TestCase):
             self.assertEqual(0, len(d))
 
     def test_read_all(self):
-        with open("tests/fixtures/partial.vcf.gz", "rb") as raw:
-            with gzip.GzipFile(fileobj=raw) as fh:
-                expected_data = fh.read()
-
         with open("tests/fixtures/partial.vcf.gz", "rb") as raw:
             with bgzip.BGZipReader(raw) as fh:
                 data = bytearray()
@@ -49,13 +47,9 @@ class TestBGZipReader(unittest.TestCase):
                         break
                     data.extend(d)
                     d.release()
-        self.assertEqual(data, expected_data)
+        self.assertEqual(data, self.expected_data)
 
     def test_read_into(self):
-        with open("tests/fixtures/partial.vcf.gz", "rb") as raw:
-            with gzip.GzipFile(fileobj=raw) as fh:
-                expected_data = fh.read()
-
         with open("tests/fixtures/partial.vcf.gz", "rb") as raw:
             data = bytearray()
             with bgzip.BGZipReader(raw) as fh:
@@ -65,7 +59,7 @@ class TestBGZipReader(unittest.TestCase):
                         break
                     data.extend(d)
                     d.release()
-        self.assertEqual(expected_data, data)
+        self.assertEqual(self.expected_data, data)
 
 class TestBGZipWriter(unittest.TestCase):
     def test_write(self):
