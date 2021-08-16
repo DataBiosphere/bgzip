@@ -47,23 +47,20 @@ class BGZipReader(io.IOBase):
                 self._stop += bytes_inflated
                 break
 
-    def _read(self, size: int) -> memoryview:
-        size = min(size, self._stop - self._start)
-        ret_val = self._inflate_buf[self._start:self._start + size]
-        self._start += len(ret_val)
-        return ret_val
+    def _read(self, requested_size: int) -> memoryview:
+        if self._start == self._stop:
+            self._fetch_and_inflate()
+        size = min(requested_size, self._stop - self._start)
+        out = self._inflate_buf[self._start:self._start + size]
+        self._start += len(out)
+        return out
 
     def read(self, size: int) -> memoryview:
         """
         Return a view to mutable memory. View should be consumed before calling 'read' again.
         """
         assert size > 0
-        out = self._read(size)
-        if out:
-            return out
-        else:
-            self._fetch_and_inflate()
-            return self._read(size)
+        return self._read(size)
 
     def readinto(self, buff) -> int:
         sz = len(buff)
