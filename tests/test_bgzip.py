@@ -29,7 +29,6 @@ class TestBGZipReader(unittest.TestCase):
                         break
                     data.extend(d)
                     d.release()
-
         self.assertEqual(self.expected_data, data)
 
     def test_empty(self):
@@ -54,6 +53,24 @@ class TestBGZipReader(unittest.TestCase):
                     data.extend(d)
                     d.release()
         self.assertEqual(self.expected_data, data)
+
+    def test_iter(self):
+        with self.subTest("iter byte lines"):
+            data = b""
+            with open("tests/fixtures/partial.vcf.gz", "rb") as raw:
+                with bgzip.BGZipReader(raw, 1024 * 1024 * 1) as fh:
+                    for line in fh:
+                        data += line
+            self.assertEqual(self.expected_data, data)
+
+        with self.subTest("iter text lines"):
+            content = ""
+            with open("tests/fixtures/partial.vcf.gz", "rb") as raw:
+                with bgzip.BGZipReader(raw, 1024 * 1024 * 1) as fh:
+                    with io.TextIOWrapper(fh, "utf-8") as handle:
+                        for line in handle:
+                            content += line
+            self.assertEqual(self.expected_data.decode("utf-8"), content)
 
 class TestBGZipWriter(unittest.TestCase):
     def test_write(self):
