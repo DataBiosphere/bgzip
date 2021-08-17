@@ -1,9 +1,13 @@
 import zlib
 import struct
+from ctypes import util as ctypes_util
 
 import numba
 import numpy as np
 
+
+foo = ctypes_util.find_library("c")
+print(foo)
 
 MAGIC = b"\x1f\x8b\x08\x04"  # b"\037\213\010\4"
 MAGIC_SIZE = len(MAGIC)
@@ -44,8 +48,8 @@ BLOCKS = np.empty((100000,), dtype=DATA_BLOCK)
     
 def _inflate_blocks(src: memoryview, dst: memoryview, number_of_blocks: int) -> int:
     offset = 0
-    for start, deflated_size, inflated_size, crc in BLOCKS[:number_of_blocks]:
-        deflated_data = src[start: start + deflated_size]
+    for block in BLOCKS[:number_of_blocks]:
+        deflated_data = src[block['start']: block['start'] + block['deflated_size']]
         inflated_data = zlib.decompress(deflated_data, wbits=-15)
         dst[offset: offset + len(inflated_data)] = inflated_data
         offset += len(inflated_data)
