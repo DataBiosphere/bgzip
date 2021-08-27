@@ -72,6 +72,17 @@ class TestBGZipReader(unittest.TestCase):
                             content += line
             self.assertEqual(self.expected_data.decode("utf-8"), content)
 
+    def test_inflate_blocks(self):
+        inflate_buf = bytearray(30 * 1024 * 1024)
+        deflate_buffers = bgzip.gen_deflate_buffers(100)
+        _, bufs = bgzip.deflate_to_buffers(self.expected_data, deflate_buffers)
+        output_views = bgzip.inflate_blocks(bufs, memoryview(inflate_buf))
+        self.assertEqual(self.expected_data, b"".join(output_views))
+
+        with self.subTest("passing in non-memoryview buffers should raise"):
+            with self.assertRaises(TypeError):
+                bgzip.inflate_blocks([b"asfd"], memoryview(inflate_buf))
+
 class TestBGZipWriter(unittest.TestCase):
     def test_write(self):
         with open("tests/fixtures/partial.vcf.gz", "rb") as raw:

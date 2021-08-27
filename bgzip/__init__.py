@@ -96,6 +96,15 @@ class BGZipReader(io.RawIOBase):
         if hasattr(self, "_buffered"):
             self._buffered.close()
 
+def inflate_blocks(blocks: Iterable[bytes], inflate_buf: memoryview, num_threads: int=cpu_count()) -> List[memoryview]:
+    inflated_sizes = bgu.inflate_blocks(blocks, inflate_buf, num_threads)
+    output_views = [None] * len(inflated_sizes)
+    total = 0
+    for i, sz in enumerate(inflated_sizes):
+        output_views[i] = inflate_buf[total: total + sz]
+        total += sz
+    return output_views
+
 class BGZipWriter(io.IOBase):
     def __init__(self, fileobj: IO, batch_size: int=2000, num_threads: int=cpu_count()):
         self.fileobj = fileobj
