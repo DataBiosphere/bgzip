@@ -1,7 +1,7 @@
 import io
 from math import floor, ceil
 from multiprocessing import cpu_count
-from typing import Generator, List, IO
+from typing import Generator, IO, Iterable, List, Tuple
 
 from bgzip import bgzip_utils as bgu  # type: ignore
 
@@ -108,9 +108,9 @@ class BGZipWriter(io.IOBase):
         return True
 
     def _deflate_and_write(self, data):
-        deflated_sizes = bgu.deflate_to_buffers(data, self._deflate_buffers, num_threads=self.num_threads)
-        for buf, size in zip(self._deflate_buffers, deflated_sizes):
-            self.fileobj.write(memoryview(buf)[:size])
+        _, deflated_blocks = deflate_to_buffers(data, self._deflate_buffers, num_threads=self.num_threads)
+        for block in deflated_blocks:
+            self.fileobj.write(block)
 
     def _compress(self, process_all_chunks=False):
         number_of_chunks = len(self._input_buffer) / bgu.block_data_inflated_size
@@ -142,3 +142,10 @@ def gen_deflate_buffers(number_of_buffers: int) -> List[bytearray]:
     # Include a kilobyte of padding for poorly compressible data
     max_deflated_block_size = bgu.block_data_inflated_size + bgu.block_metadata_size + 1024
     return [bytearray(max_deflated_block_size) for _ in range(number_of_buffers)]
+
+def deflate_to_buffers(data: memoryview,
+                       deflate_buffers: Iterable[bytearray],
+                       num_threads: int=cpu_count()) -> Tuple[int, List[memoryview]]:
+    deflated_sizes = bgu.deflate_to_buffers(data, deflate_buffers, num_threads)
+    bytes_deflated = bgu.block_data_inflated_size * len(deflated_sizes)
+    return bytes_deflated, [memoryview(buf)[:sz] for buf, sz in zip(deflate_buffers, deflated_sizes)]
