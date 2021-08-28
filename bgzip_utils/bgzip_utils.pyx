@@ -291,7 +291,7 @@ cdef void _get_buffer(PyObject * obj, Py_buffer * view):
     if -1 == err:
         raise Exception()
 
-def compress_to_stream(py_input_buff, list py_deflated_buffers, handle, int num_threads):
+def deflate_to_buffers(py_input_buff, list py_deflated_buffers, int num_threads):
     """
     Compress the data in `py_input_buff` and write it to `handle`.
 
@@ -336,5 +336,4 @@ def compress_to_stream(py_input_buff, list py_deflated_buffers, handle, int num_
 
     PyBuffer_Release(&input_view)
 
-    for i in range(number_of_chunks):
-        handle.write(py_deflated_buffers[i][:blocks[i].block_size])
+    return [blocks[i].block_size for i in range(number_of_chunks)]
