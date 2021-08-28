@@ -102,14 +102,14 @@ class BGZipWriter(io.IOBase):
         self.batch_size = batch_size
         self._input_buffer = bytearray()
         block_size = bgu.block_data_inflated_size + bgu.block_metadata_size
-        self._scratch_buffers = [bytearray(block_size) for _ in range(self.batch_size)]
+        self._deflated_buffers = [bytearray(block_size) for _ in range(self.batch_size)]
         self.num_threads = num_threads
 
     def writable(self):
         return True
 
     def _deflate_and_write(self, data):
-        bgu.compress_to_stream(data, self._scratch_buffers, self.fileobj, num_threads=self.num_threads)
+        bgu.compress_to_stream(data, self._deflated_buffers, self.fileobj, num_threads=self.num_threads)
 
     def _compress(self, process_all_chunks=False):
         number_of_chunks = len(self._input_buffer) / bgu.block_data_inflated_size
