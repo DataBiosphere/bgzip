@@ -284,47 +284,6 @@ cdef unsigned int _block_metadata_size = sizeof(BlockHeader) + sizeof(BlockHeade
 block_data_inflated_size = _block_data_inflated_size
 block_metadata_size = _block_metadata_size
 
-def compress_chunks(input_chunks, int num_threads):
-    cdef int i, chunk_size, compressed_chunk_guess_size
-    cdef int number_of_chunks = len(input_chunks)
-    cdef Block blocks[NUMBER_OF_BLOCKS]
-
-    if number_of_chunks > NUMBER_OF_BLOCKS:
-        raise Exception(f"Cannot compress more than {NUMBER_OF_BLOCKS} chunks per call. Received {number_of_chunks}")
-
-    cdef PyObject * chunk, * compressed_chunk
-    cdef PyObject * chunks = <PyObject *>input_chunks
-    cdef PyObject * compressed_chunks[NUMBER_OF_BLOCKS]
-
-    for i in range(number_of_chunks):
-        chunk = PyList_GetItem(chunks, i)
-        chunk_size = PyBytes_GET_SIZE(chunk)
-        compressed_chunk_guess_size = chunk_size + _block_metadata_size
-        compressed_chunk = PyByteArray_FromStringAndSize(NULL, compressed_chunk_guess_size)
-        compressed_chunks[i] = compressed_chunk
-
-        blocks[i].inflated_size = chunk_size
-        blocks[i].next_in = <Bytef *>PyBytes_AS_STRING(chunk)
-        blocks[i].available_in = chunk_size
-        blocks[i].next_out = <Bytef *>PyByteArray_AS_STRING(compressed_chunk)
-        blocks[i].avail_out = compressed_chunk_guess_size
-
-    with nogil:
-        for i in prange(number_of_chunks, num_threads=num_threads, schedule="dynamic"):
-            if BGZIP_OK != compress_block(&blocks[i]):
-                with gil:
-                    raise BGZIPException()
-            compressed_chunk = compressed_chunks[i]
-
-    ret = list()
-    for i in range(number_of_chunks):
-        compressed_chunk = compressed_chunks[i]
-        PyByteArray_Resize(compressed_chunk, blocks[i].block_size)
-        ret.append(<bytearray>compressed_chunks[i])
-        Py_DECREF(compressed_chunk)
-    return ret
-
-
 cdef void _get_buffer(PyObject * obj, Py_buffer * view):
     cdef int err
 
