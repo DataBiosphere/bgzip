@@ -97,6 +97,11 @@ class TestBGZipWriter(unittest.TestCase):
         self.assertEqual(inflated_data, reinflated_data)
         self.assertTrue(fh_out.getvalue().endswith(bgzip.bgzip_eof))
 
+    def test_write_random_data(self):
+        inflated_data = os.urandom(1024 * 1024)
+        with bgzip.BGZipWriter(io.BytesIO()) as writer:
+            writer.write(inflated_data)
+
     def test_pathalogical_write(self):
         fh = io.BytesIO()
         with bgzip.BGZipWriter(fh):

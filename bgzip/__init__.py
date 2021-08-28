@@ -101,8 +101,11 @@ class BGZipWriter(io.IOBase):
         self.fileobj = fileobj
         self.batch_size = batch_size
         self._input_buffer = bytearray()
-        block_size = bgu.block_data_inflated_size + bgu.block_metadata_size
-        self._deflated_buffers = [bytearray(block_size) for _ in range(self.batch_size)]
+
+        # Include a kilobyte of padding for poorly compressible data
+        max_deflated_block_size = bgu.block_data_inflated_size + bgu.block_metadata_size + 1024
+
+        self._deflated_buffers = [bytearray(max_deflated_block_size) for _ in range(self.batch_size)]
         self.num_threads = num_threads
 
     def writable(self):
