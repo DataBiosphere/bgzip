@@ -332,30 +332,30 @@ cdef void _get_buffer(PyObject * obj, Py_buffer * view):
     if -1 == err:
         raise Exception()
 
-def compress_to_stream(input_buff_obj, list scratch_buffers, handle, int num_threads):
+def compress_to_stream(py_input_buff, list py_deflated_buffers, handle, int num_threads):
     """
-    Compress the data in `input_buff_obj` and write it to `handle`.
+    Compress the data in `py_input_buff` and write it to `handle`.
 
-    `scratch_buffers` should contain enough buffers to hold the number of blocks compressed. Each
+    `deflated_buffers` should contain enough buffers to hold the number of blocks compressed. Each
     buffer should hold `_block_data_inflated_size + _block_metadata_size` bytes.
     """
     cdef int i, chunk_size
-    cdef unsigned int bytes_available = len(input_buff_obj)
+    cdef unsigned int bytes_available = len(py_input_buff)
     cdef int number_of_chunks = ceil(bytes_available / block_data_inflated_size)
     cdef Block blocks[NUMBER_OF_BLOCKS]
 
     if number_of_chunks > NUMBER_OF_BLOCKS:
         raise Exception(f"Cannot compress more than {NUMBER_OF_BLOCKS} chunks per call. Received {number_of_chunks}")
 
-    cdef PyObject * compressed_chunks = <PyObject *>scratch_buffers
+    cdef PyObject * deflated_buffers = <PyObject *>py_deflated_buffers
     cdef PyObject * compressed_chunk
 
     cdef Py_buffer input_view 
-    _get_buffer(<PyObject *>input_buff_obj, &input_view)
+    _get_buffer(<PyObject *>py_input_buff, &input_view)
 
     with nogil:
         for i in range(number_of_chunks):
-            compressed_chunk = <PyObject *>PyList_GetItem(compressed_chunks, i)
+            compressed_chunk = <PyObject *>PyList_GetItem(deflated_buffers, i)
 
             if bytes_available >= _block_data_inflated_size:
                 chunk_size = _block_data_inflated_size
@@ -378,4 +378,4 @@ def compress_to_stream(input_buff_obj, list scratch_buffers, handle, int num_thr
     PyBuffer_Release(&input_view)
 
     for i in range(number_of_chunks):
-        handle.write(scratch_buffers[i][:blocks[i].block_size])
+        handle.write(py_deflated_buffers[i][:blocks[i].block_size])
