@@ -300,7 +300,8 @@ def deflate_to_buffers(py_input_buff, list py_deflated_buffers, int num_threads)
     """
     cdef int i, chunk_size
     cdef unsigned int bytes_available = len(py_input_buff)
-    cdef int number_of_chunks = ceil(bytes_available / block_data_inflated_size)
+    cdef int number_of_chunks = min(ceil(bytes_available / block_data_inflated_size),
+                                    len(py_deflated_buffers))
     cdef Block blocks[NUMBER_OF_BLOCKS]
 
     if number_of_chunks > NUMBER_OF_BLOCKS:
