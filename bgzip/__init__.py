@@ -101,15 +101,15 @@ class BGZipWriter(io.IOBase):
         self.fileobj = fileobj
         self.batch_size = batch_size
         self._input_buffer = bytearray()
-        self._deflated_buffers = gen_deflate_buffers(self.batch_size)
+        self._deflate_buffers = gen_deflate_buffers(self.batch_size)
         self.num_threads = num_threads
 
     def writable(self):
         return True
 
     def _deflate_and_write(self, data):
-        deflated_sizes = bgu.deflate_to_buffers(data, self._deflated_buffers, num_threads=self.num_threads)
-        for buf, size in zip(self._deflated_buffers, deflated_sizes):
+        deflated_sizes = bgu.deflate_to_buffers(data, self._deflate_buffers, num_threads=self.num_threads)
+        for buf, size in zip(self._deflate_buffers, deflated_sizes):
             self.fileobj.write(memoryview(buf)[:size])
 
     def _compress(self, process_all_chunks=False):
