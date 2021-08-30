@@ -78,11 +78,23 @@ class TestBGZipWriter(unittest.TestCase):
             with gzip.GzipFile(fileobj=raw) as fh:
                 inflated_data = fh.read()
 
+        deflate_buffers = bgzip.gen_deflate_buffers(3)
+        deflated_with_buffers = bytes()
+        data = memoryview(bytes(inflated_data))
+        while data:
+            bytes_deflated, deflated_blocks = bgzip.deflate_to_buffers(data, deflate_buffers, 2)
+            data = data[bytes_deflated:]
+            deflated_with_buffers += b"".join(deflated_blocks)
+        deflated_with_buffers += bgzip.bgzip_eof
+
         fh_out = io.BytesIO()
         with bgzip.BGZipWriter(fh_out) as writer:
             n = 987345
             writer.write(inflated_data[:n])
             writer.write(inflated_data[n:])
+        deflated_with_writer = fh_out.getvalue()
+
+        self.assertEqual(deflated_with_buffers, deflated_with_writer)
 
         fh_out.seek(0)
         with bgzip.BGZipReader(fh_out) as reader:
@@ -95,7 +107,7 @@ class TestBGZipWriter(unittest.TestCase):
                     break
 
         self.assertEqual(inflated_data, reinflated_data)
-        self.assertTrue(fh_out.getvalue().endswith(bgzip.bgzip_eof))
+        self.assertTrue(deflated_with_writer.endswith(bgzip.bgzip_eof))
 
     def test_write_random_data(self):
         inflated_data = os.urandom(1024 * 1024)
