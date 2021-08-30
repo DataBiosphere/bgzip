@@ -1,7 +1,7 @@
 import io
 from math import floor, ceil
 from multiprocessing import cpu_count
-from typing import IO, Generator
+from typing import Generator, List, IO
 
 from bgzip import bgzip_utils as bgu  # type: ignore
 
@@ -101,11 +101,7 @@ class BGZipWriter(io.IOBase):
         self.fileobj = fileobj
         self.batch_size = batch_size
         self._input_buffer = bytearray()
-
-        # Include a kilobyte of padding for poorly compressible data
-        max_deflated_block_size = bgu.block_data_inflated_size + bgu.block_metadata_size + 1024
-
-        self._deflated_buffers = [bytearray(max_deflated_block_size) for _ in range(self.batch_size)]
+        self._deflated_buffers = gen_deflate_buffers(self.batch_size)
         self.num_threads = num_threads
 
     def writable(self):
@@ -141,3 +137,8 @@ class BGZipWriter(io.IOBase):
             self._compress(process_all_chunks=True)
         self.fileobj.write(bgzip_eof)
         self.fileobj.flush()
+
+def gen_deflate_buffers(number_of_buffers: int) -> List[bytearray]:
+    # Include a kilobyte of padding for poorly compressible data
+    max_deflated_block_size = bgu.block_data_inflated_size + bgu.block_metadata_size + 1024
+    return [bytearray(max_deflated_block_size) for _ in range(number_of_buffers)]
