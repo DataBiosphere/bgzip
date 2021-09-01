@@ -175,12 +175,21 @@ cdef bgzip_err read_block(Block * block, BGZipStream *src) nogil:
     block.crc = tail.crc
     block.inflated_size = tail.inflated_size
 
-def inflate_into(bytes src_buff, object dst_buff_obj, int num_threads):
+cdef py_memoryview_to_buffer(object py_memoryview, Bytef ** buf):
+    cdef PyObject * obj = <PyObject *>py_memoryview
+    if PyMemoryView_Check(obj):
+        # TODO: Check buffer is contiguous, has normal stride
+        buf[0] = <Bytef *>(<Py_buffer *>PyMemoryView_GET_BUFFER(obj)).buf
+        assert NULL != buf
+    else:
+        raise TypeError("'py_memoryview' must be a memoryview instance.")
+
+def inflate_into(bytes src_buff, object py_dst_mem_view, int num_threads):
     """
-    Inflate bytes from `src_buff` into `dst_buff`
+    Inflate bytes from `src_buff` into `py_dst_mem_view`
     """
     cdef int i, err
-    cdef Bytef * out = NULL
+    cdef Bytef * dst_buf = NULL
     cdef unsigned int bytes_read = 0, bytes_inflated = 0
     cdef int number_of_blocks = 0
     cdef Block blocks[NUMBER_OF_BLOCKS]
@@ -189,16 +198,8 @@ def inflate_into(bytes src_buff, object dst_buff_obj, int num_threads):
     src.next_in = src_buff
     src.available_in = len(src_buff)
 
-    cdef PyObject * dst_buff = <PyObject *>dst_buff_obj
-    if PyMemoryView_Check(dst_buff):
-        # TODO: Check buffer is contiguous, has normal stride
-        out  = <Bytef *>(<Py_buffer *>PyMemoryView_GET_BUFFER(dst_buff)).buf
-        assert NULL != out
-    else:
-        raise Exception("dst_buff_obj must be a memoryview instance.")
-        # TODO: support bytearray objects
-
-    cdef unsigned int avail_out = PySequence_Size(dst_buff)
+    py_memoryview_to_buffer(py_dst_mem_view, &dst_buf)
+    cdef unsigned int avail_out = PySequence_Size(<PyObject *>py_dst_mem_view)
 
     with nogil:
         for i in range(NUMBER_OF_BLOCKS):
@@ -218,8 +219,8 @@ def inflate_into(bytes src_buff, object dst_buff_obj, int num_threads):
             number_of_blocks += 1
 
         for i in range(number_of_blocks):
-            blocks[i].next_out = out
-            out += blocks[i].inflated_size
+            blocks[i].next_out = dst_buf
+            dst_buf += blocks[i].inflated_size
 
         for i in prange(number_of_blocks, num_threads=num_threads, schedule="dynamic"):
             inflate_block(&blocks[i])
