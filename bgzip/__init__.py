@@ -98,7 +98,7 @@ class BGZipReader(io.RawIOBase):
 
 def inflate_blocks(blocks: Iterable[bytes], inflate_buf: memoryview, num_threads: int=cpu_count()) -> List[memoryview]:
     inflated_sizes = bgu.inflate_blocks(blocks, inflate_buf, num_threads)
-    output_views = [None] * len(inflated_sizes)
+    output_views: List[memoryview] = [None] * len(inflated_sizes)  # type: ignore
     total = 0
     for i, sz in enumerate(inflated_sizes):
         output_views[i] = inflate_buf[total: total + sz]
