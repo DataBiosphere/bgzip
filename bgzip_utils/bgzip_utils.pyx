@@ -227,6 +227,49 @@ def inflate_into(bytes src_buff, object py_dst_mem_view, int num_threads):
 
     return bytes_read, bytes_inflated
 
+def inflate_blocks(list py_src_buffs, object dst_buff_obj, int num_threads):
+    """
+    Inflate bytes from `py_src_buffs` into `dst_buff`
+    """
+    cdef int i, err
+    cdef Bytef * out = NULL
+    cdef unsigned int bytes_inflated = 0, blocks_inflated = 0
+    cdef int number_of_blocks = len(py_src_buffs)
+    cdef Block blocks[NUMBER_OF_BLOCKS]
+    cdef BGZipStream src[NUMBER_OF_BLOCKS]
+
+    for i in range(number_of_blocks):
+        py_memoryview_to_buffer(py_src_buffs[i], &(src[i].next_in))
+        src[i].available_in = len(py_src_buffs[i])
+
+    py_memoryview_to_buffer(dst_buff_obj, &out)
+    cdef unsigned int avail_out = PySequence_Size(<PyObject *>dst_buff_obj)
+
+    with nogil:
+        for i in range(number_of_blocks):
+            err = read_block(&blocks[i], &src[i])
+            if BGZIP_OK == err:
+                pass
+            elif BGZIP_INSUFFICIENT_BYTES == err:
+                break
+            elif BGZIP_MALFORMED_HEADER == err:
+                raise BGZIPMalformedHeaderException("Block gzip magic not found in header.")
+            else:
+                raise BGZIPException("decompress 2 error")
+            if avail_out < bytes_inflated + blocks[i].inflated_size:
+                break
+            blocks_inflated += 1
+            bytes_inflated += blocks[i].inflated_size
+
+        for i in range(blocks_inflated):
+            blocks[i].next_out = out
+            out += blocks[i].inflated_size
+
+        for i in prange(blocks_inflated, num_threads=num_threads, schedule="dynamic"):
+            inflate_block(&blocks[i])
+
+    return [blocks[i].inflated_size for i in range(blocks_inflated)]
+
 cdef bgzip_err compress_block(Block * block) nogil:
     cdef z_stream zst
     cdef int err = 0
