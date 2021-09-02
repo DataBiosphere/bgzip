@@ -108,14 +108,8 @@ class TestBGZipWriter(unittest.TestCase):
         self.assertEqual(deflated_with_buffers, deflated_with_writer)
 
         fh_out.seek(0)
-        with bgzip.BGZipReader(fh_out) as reader:
-            reinflated_data = bytearray()
-            while True:
-                d = reader.read(1024 * 1024)
-                if d:
-                    reinflated_data += d
-                else:
-                    break
+        with gzip.GzipFile(fileobj=fh_out) as fh:
+            reinflated_data = fh.read()
 
         self.assertEqual(inflated_data, reinflated_data)
         self.assertTrue(deflated_with_writer.endswith(bgzip.bgzip_eof))
