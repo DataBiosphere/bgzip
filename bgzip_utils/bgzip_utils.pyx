@@ -11,7 +11,7 @@ from cpython_nogil cimport *
 
 
 cdef enum:
-    BLOCK_BATCH_SIZE = 20000
+    BLOCK_BATCH_SIZE = 300
     MAGIC_LENGTH = 4
 
 block_batch_size = int(BLOCK_BATCH_SIZE)  # make BLOCK_BATCH_SIZE accessible in Python
