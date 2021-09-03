@@ -74,7 +74,7 @@ class TestBGZipReader(unittest.TestCase):
 
     def test_inflate_blocks(self):
         inflate_buf = bytearray(30 * 1024 * 1024)
-        deflate_buffers = bgzip.gen_deflate_buffers(100)
+        deflate_buffers = bgzip.gen_deflate_buffers()
         _, bufs = bgzip.deflate_to_buffers(self.expected_data, deflate_buffers)
         output_views = bgzip.inflate_blocks(bufs, memoryview(inflate_buf))
         self.assertEqual(self.expected_data, b"".join(output_views))
@@ -84,6 +84,14 @@ class TestBGZipReader(unittest.TestCase):
                 bgzip.inflate_blocks([b"asfd"], memoryview(inflate_buf))
 
 class TestBGZipWriter(unittest.TestCase):
+    def test_gen_deflate_buffers(self):
+        bgzip.gen_deflate_buffers(bgzip.bgu.block_batch_size)
+        bgzip.gen_deflate_buffers(1)
+
+        for num_bufs in [0, bgzip.bgu.block_batch_size + 1]:
+            with self.assertRaises(ValueError):
+                bgzip.gen_deflate_buffers(num_bufs)
+
     def test_write(self):
         with open("tests/fixtures/partial.vcf.gz", "rb") as raw:
             with gzip.GzipFile(fileobj=raw) as fh:

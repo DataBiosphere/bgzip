@@ -111,7 +111,7 @@ class BGZipWriter(io.IOBase):
     def __init__(self, fileobj: IO, num_threads: int=cpu_count()):
         self.fileobj = fileobj
         self._input_buffer = bytearray()
-        self._deflate_buffers = gen_deflate_buffers(bgu.block_batch_size)
+        self._deflate_buffers = gen_deflate_buffers()
         self.num_threads = num_threads
 
     def writable(self):
@@ -148,7 +148,9 @@ class BGZipWriter(io.IOBase):
         self.fileobj.write(bgzip_eof)
         self.fileobj.flush()
 
-def gen_deflate_buffers(number_of_buffers: int) -> List[bytearray]:
+def gen_deflate_buffers(number_of_buffers: int=bgu.block_batch_size) -> List[bytearray]:
+    if 0 >= number_of_buffers or bgu.block_batch_size < number_of_buffers:
+        raise ValueError(f"0 < 'number_of_buffers' <= '{bgu.block_batch_size}")
     # Include a kilobyte of padding for poorly compressible data
     max_deflated_block_size = bgu.block_data_inflated_size + bgu.block_metadata_size + 1024
     return [bytearray(max_deflated_block_size) for _ in range(number_of_buffers)]
