@@ -349,10 +349,6 @@ def deflate_to_buffers(py_input_buff, list py_deflated_buffers, int num_threads)
     cdef int number_of_chunks = min(ceil(bytes_available / block_data_inflated_size),
                                     len(py_deflated_buffers))
     cdef Block blocks[BLOCK_BATCH_SIZE]
-
-    if number_of_chunks > BLOCK_BATCH_SIZE:
-        raise Exception(f"Cannot compress more than {BLOCK_BATCH_SIZE} chunks per call. Received {number_of_chunks}")
-
     cdef PyObject * deflated_buffers = <PyObject *>py_deflated_buffers
     cdef PyObject * compressed_chunk
 
