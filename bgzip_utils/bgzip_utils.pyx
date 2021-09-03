@@ -14,6 +14,8 @@ cdef enum:
     BLOCK_BATCH_SIZE = 20000
     MAGIC_LENGTH = 4
 
+block_batch_size = int(BLOCK_BATCH_SIZE)  # make BLOCK_BATCH_SIZE accessible in Python
+
 cdef enum bgzip_err:
     BGZIP_CRC_MISMATCH = -8
     BGZIP_ZLIB_INITIALIZATION_ERROR

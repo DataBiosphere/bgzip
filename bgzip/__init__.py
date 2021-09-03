@@ -106,11 +106,10 @@ def inflate_blocks(blocks: Iterable[bytes], inflate_buf: memoryview, num_threads
     return output_views
 
 class BGZipWriter(io.IOBase):
-    def __init__(self, fileobj: IO, batch_size: int=2000, num_threads: int=cpu_count()):
+    def __init__(self, fileobj: IO, num_threads: int=cpu_count()):
         self.fileobj = fileobj
-        self.batch_size = batch_size
         self._input_buffer = bytearray()
-        self._deflate_buffers = gen_deflate_buffers(self.batch_size)
+        self._deflate_buffers = gen_deflate_buffers(bgu.block_batch_size)
         self.num_threads = num_threads
 
     def writable(self):
@@ -126,8 +125,8 @@ class BGZipWriter(io.IOBase):
         number_of_chunks = ceil(number_of_chunks) if process_all_chunks else floor(number_of_chunks)
 
         while number_of_chunks:
-            batch = min(number_of_chunks, self.batch_size)
-            if batch < self.batch_size and not process_all_chunks:
+            batch = min(number_of_chunks, bgu.block_batch_size)
+            if batch < bgu.block_batch_size and not process_all_chunks:
                 break
 
             n = batch * bgu.block_data_inflated_size
@@ -138,7 +137,7 @@ class BGZipWriter(io.IOBase):
 
     def write(self, data):
         self._input_buffer.extend(data)
-        if len(self._input_buffer) > self.batch_size * bgu.block_data_inflated_size:
+        if len(self._input_buffer) > bgu.block_batch_size * bgu.block_data_inflated_size:
             self._compress()
 
     def close(self):
