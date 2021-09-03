@@ -124,5 +124,13 @@ class TestBGZipWriter(unittest.TestCase):
         with bgzip.BGZipWriter(fh):
             fh.write(b"")
 
+    def test_large_write(self):
+        """Force write to use several batch calls to bgzip_utils."""
+        fh_out = io.BytesIO()
+        with bgzip.BGZipWriter(fh_out) as writer:
+            number_of_blocks = 2 * bgzip.bgu.block_batch_size + 1
+            size = number_of_blocks * bgzip.bgu.block_data_inflated_size
+            writer.write(bytearray(size))
+
 if __name__ == '__main__':
     unittest.main()
