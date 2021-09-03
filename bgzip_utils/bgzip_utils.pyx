@@ -11,7 +11,7 @@ from cpython_nogil cimport *
 
 
 cdef enum:
-    NUMBER_OF_BLOCKS = 20000
+    BLOCK_BATCH_SIZE = 20000
     MAGIC_LENGTH = 4
 
 cdef enum bgzip_err:
@@ -192,7 +192,7 @@ def inflate_into(bytes src_buff, object py_dst_mem_view, int num_threads):
     cdef Bytef * dst_buf = NULL
     cdef unsigned int bytes_read = 0, bytes_inflated = 0
     cdef int number_of_blocks = 0
-    cdef Block blocks[NUMBER_OF_BLOCKS]
+    cdef Block blocks[BLOCK_BATCH_SIZE]
 
     cdef BGZipStream src
     src.next_in = src_buff
@@ -202,7 +202,7 @@ def inflate_into(bytes src_buff, object py_dst_mem_view, int num_threads):
     cdef unsigned int avail_out = PySequence_Size(<PyObject *>py_dst_mem_view)
 
     with nogil:
-        for i in range(NUMBER_OF_BLOCKS):
+        for i in range(BLOCK_BATCH_SIZE):
             err = read_block(&blocks[i], &src)
             if BGZIP_OK == err:
                 pass
@@ -235,8 +235,8 @@ def inflate_blocks(list py_src_buffs, object dst_buff_obj, int num_threads):
     cdef Bytef * out = NULL
     cdef unsigned int bytes_inflated = 0, blocks_inflated = 0
     cdef int number_of_blocks = len(py_src_buffs)
-    cdef Block blocks[NUMBER_OF_BLOCKS]
-    cdef BGZipStream src[NUMBER_OF_BLOCKS]
+    cdef Block blocks[BLOCK_BATCH_SIZE]
+    cdef BGZipStream src[BLOCK_BATCH_SIZE]
 
     for i in range(number_of_blocks):
         py_memoryview_to_buffer(py_src_buffs[i], &(src[i].next_in))
@@ -346,10 +346,10 @@ def deflate_to_buffers(py_input_buff, list py_deflated_buffers, int num_threads)
     cdef unsigned int bytes_available = len(py_input_buff)
     cdef int number_of_chunks = min(ceil(bytes_available / block_data_inflated_size),
                                     len(py_deflated_buffers))
-    cdef Block blocks[NUMBER_OF_BLOCKS]
+    cdef Block blocks[BLOCK_BATCH_SIZE]
 
-    if number_of_chunks > NUMBER_OF_BLOCKS:
-        raise Exception(f"Cannot compress more than {NUMBER_OF_BLOCKS} chunks per call. Received {number_of_chunks}")
+    if number_of_chunks > BLOCK_BATCH_SIZE:
+        raise Exception(f"Cannot compress more than {BLOCK_BATCH_SIZE} chunks per call. Received {number_of_chunks}")
 
     cdef PyObject * deflated_buffers = <PyObject *>py_deflated_buffers
     cdef PyObject * compressed_chunk
