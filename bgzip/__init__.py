@@ -1,7 +1,7 @@
 import io
 from math import floor, ceil
 from multiprocessing import cpu_count
-from typing import Generator, IO, Iterable, List, Tuple
+from typing import Generator, IO, Iterable, List, Sequence, Tuple
 
 from bgzip import bgzip_utils as bgu  # type: ignore
 
@@ -96,7 +96,9 @@ class BGZipReader(io.RawIOBase):
         if hasattr(self, "_buffered"):
             self._buffered.close()
 
-def inflate_blocks(blocks: Iterable[bytes], inflate_buf: memoryview, num_threads: int=cpu_count()) -> List[memoryview]:
+def inflate_blocks(blocks: Sequence[memoryview],
+                   inflate_buf: memoryview,
+                   num_threads: int=cpu_count()) -> List[memoryview]:
     inflated_sizes = bgu.inflate_blocks(blocks, inflate_buf, num_threads)
     output_views: List[memoryview] = [None] * len(inflated_sizes)  # type: ignore
     total = 0
