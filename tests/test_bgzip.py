@@ -136,10 +136,7 @@ class TestBGZipWriter(unittest.TestCase):
                 bgzip.Deflater._gen_buffers(num_bufs)
 
     def test_write(self):
-        with open("tests/fixtures/partial.vcf.gz", "rb") as raw:
-            with gzip.GzipFile(fileobj=raw) as fh:
-                inflated_data = fh.read()
-
+        inflated_data = os.urandom(1024 * 1024 * 50)
         deflater = bgzip.Deflater()
         deflated_with_buffers = bytes()
         data = memoryview(bytes(inflated_data))
