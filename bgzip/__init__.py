@@ -117,25 +117,14 @@ class BGZipWriter(io.IOBase):
     def writable(self):
         return True
 
-    def _deflate_and_write(self, data):
-        _, deflated_blocks = self._deflater.deflate(data)
-        for block in deflated_blocks:
-            self.fileobj.write(block)
-
     def _compress(self, process_all_chunks=False):
-        number_of_chunks = len(self._input_buffer) / bgu.block_data_inflated_size
-        number_of_chunks = ceil(number_of_chunks) if process_all_chunks else floor(number_of_chunks)
-
-        while number_of_chunks:
-            batch = min(number_of_chunks, bgu.block_batch_size)
-            if batch < bgu.block_batch_size and not process_all_chunks:
+        while self._input_buffer:
+            bytes_deflated, blocks = self._deflater.deflate(self._input_buffer)
+            for b in blocks:
+                self.fileobj.write(b)
+            self._input_buffer = self._input_buffer[bytes_deflated:]
+            if len(self._input_buffer) < bgu.block_data_inflated_size and not process_all_chunks:
                 break
-
-            n = batch * bgu.block_data_inflated_size
-            self._deflate_and_write(memoryview(self._input_buffer)[:n])
-            self._input_buffer = self._input_buffer[n:]
-
-            number_of_chunks -= batch
 
     def write(self, data):
         self._input_buffer.extend(data)
@@ -149,7 +138,7 @@ class BGZipWriter(io.IOBase):
         self.fileobj.flush()
 
 class Deflater:
-    def __init__(self, num_threads: int=cpu_count(), num_deflate_buffers: int=100):
+    def __init__(self, num_threads: int=cpu_count(), num_deflate_buffers: int=bgu.block_batch_size):
         self._num_threads = num_threads
         self._deflate_bufs = self._gen_buffers(num_deflate_buffers)
 
