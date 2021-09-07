@@ -35,9 +35,9 @@ class BGZipReader(io.RawIOBase):
     def _fetch_and_inflate(self):
         while True:
             self._input_data += self.fileobj.read(self.raw_read_chunk_size)
-            bytes_read, bytes_inflated = bgu.inflate_into(self._input_data,
-                                                          self._inflate_buf[self._start:],
-                                                          num_threads=self.num_threads)
+            bytes_read, bytes_inflated, _, _ = bgu.inflate_chunks([memoryview(self._input_data)],
+                                                                  self._inflate_buf[self._start:],
+                                                                  num_threads=self.num_threads)
             if self._input_data and not bytes_inflated:
                 # Not enough space at end of buffer, reset indices
                 assert self._start == self._stop, "Read error. Please contact bgzip maintainers."
