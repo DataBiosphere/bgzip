@@ -81,10 +81,10 @@ class TestBGZipReader(unittest.TestCase):
 
         data = memoryview(expected_data)
         deflated_blocks = list()
-        deflate_buffers = bgzip.gen_deflate_buffers()
+        deflater = bgzip.Deflater()
         while data:
-            bytes_deflated, bufs = bgzip.deflate_to_buffers(data, deflate_buffers)
-            deflated_blocks.extend([bytes(b) for b in bufs])
+            bytes_deflated, blocks = deflater.deflate(data)
+            deflated_blocks.extend([bytes(b) for b in blocks])
             data = data[bytes_deflated:]
 
         def _test_inflate_chunks(remaining_chunks: List[memoryview]):
@@ -127,24 +127,24 @@ def _randomly_chunked(items: Sequence[Any]) -> Generator[Sequence[Any], None, No
         items = items[chunk_size:]
 
 class TestBGZipWriter(unittest.TestCase):
-    def test_gen_deflate_buffers(self):
-        bgzip.gen_deflate_buffers(bgzip.bgu.block_batch_size)
-        bgzip.gen_deflate_buffers(1)
+    def test_gen_buffers(self):
+        bgzip.Deflater._gen_buffers(bgzip.bgu.block_batch_size)
+        bgzip.Deflater._gen_buffers(1)
 
         for num_bufs in [0, bgzip.bgu.block_batch_size + 1]:
             with self.assertRaises(ValueError):
-                bgzip.gen_deflate_buffers(num_bufs)
+                bgzip.Deflater._gen_buffers(num_bufs)
 
     def test_write(self):
         with open("tests/fixtures/partial.vcf.gz", "rb") as raw:
             with gzip.GzipFile(fileobj=raw) as fh:
                 inflated_data = fh.read()
 
-        deflate_buffers = bgzip.gen_deflate_buffers(3)
+        deflater = bgzip.Deflater()
         deflated_with_buffers = bytes()
         data = memoryview(bytes(inflated_data))
         while data:
-            bytes_deflated, deflated_blocks = bgzip.deflate_to_buffers(data, deflate_buffers, 2)
+            bytes_deflated, deflated_blocks = deflater.deflate(data)
             data = data[bytes_deflated:]
             deflated_with_buffers += b"".join(deflated_blocks)
         deflated_with_buffers += bgzip.bgzip_eof

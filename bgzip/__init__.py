@@ -111,14 +111,14 @@ class BGZipWriter(io.IOBase):
     def __init__(self, fileobj: IO, num_threads: int=cpu_count()):
         self.fileobj = fileobj
         self._input_buffer = bytearray()
-        self._deflate_buffers = gen_deflate_buffers()
+        self._deflater = Deflater(num_threads)
         self.num_threads = num_threads
 
     def writable(self):
         return True
 
     def _deflate_and_write(self, data):
-        _, deflated_blocks = deflate_to_buffers(data, self._deflate_buffers, num_threads=self.num_threads)
+        _, deflated_blocks = self._deflater.deflate(data)
         for block in deflated_blocks:
             self.fileobj.write(block)
 
@@ -148,16 +148,20 @@ class BGZipWriter(io.IOBase):
         self.fileobj.write(bgzip_eof)
         self.fileobj.flush()
 
-def gen_deflate_buffers(number_of_buffers: int=bgu.block_batch_size) -> List[bytearray]:
-    if 0 >= number_of_buffers or bgu.block_batch_size < number_of_buffers:
-        raise ValueError(f"0 < 'number_of_buffers' <= '{bgu.block_batch_size}")
-    # Include a kilobyte of padding for poorly compressible data
-    max_deflated_block_size = bgu.block_data_inflated_size + bgu.block_metadata_size + 1024
-    return [bytearray(max_deflated_block_size) for _ in range(number_of_buffers)]
+class Deflater:
+    def __init__(self, num_threads: int=cpu_count(), num_deflate_buffers: int=100):
+        self._num_threads = num_threads
+        self._deflate_bufs = self._gen_buffers(num_deflate_buffers)
 
-def deflate_to_buffers(data: memoryview,
-                       deflate_buffers: Iterable[bytearray],
-                       num_threads: int=cpu_count()) -> Tuple[int, List[memoryview]]:
-    deflated_sizes = bgu.deflate_to_buffers(data, deflate_buffers, num_threads)
-    bytes_deflated = min(len(data), bgu.block_data_inflated_size * len(deflated_sizes))
-    return bytes_deflated, [memoryview(buf)[:sz] for buf, sz in zip(deflate_buffers, deflated_sizes)]
+    @staticmethod
+    def _gen_buffers(number_of_buffers: int=bgu.block_batch_size) -> List[bytearray]:
+        if 0 >= number_of_buffers or bgu.block_batch_size < number_of_buffers:
+            raise ValueError(f"0 < 'number_of_buffers' <= '{bgu.block_batch_size}")
+        # Include a kilobyte of padding for poorly compressible data
+        max_deflated_block_size = bgu.block_data_inflated_size + bgu.block_metadata_size + 1024
+        return [bytearray(max_deflated_block_size) for _ in range(number_of_buffers)]
+
+    def deflate(self, data: memoryview) -> Tuple[int, List[memoryview]]:
+        deflated_sizes = bgu.deflate_to_buffers(data, self._deflate_bufs, self._num_threads)
+        bytes_deflated = min(len(data), bgu.block_data_inflated_size * len(deflated_sizes))
+        return bytes_deflated, [memoryview(buf)[:sz] for buf, sz in zip(self._deflate_bufs, deflated_sizes)]
