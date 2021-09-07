@@ -186,49 +186,6 @@ cdef py_memoryview_to_buffer(object py_memoryview, Bytef ** buf):
     else:
         raise TypeError("'py_memoryview' must be a memoryview instance.")
 
-def inflate_into(bytes src_buff, object py_dst_mem_view, int num_threads):
-    """
-    Inflate bytes from `src_buff` into `py_dst_mem_view`
-    """
-    cdef int i, err
-    cdef Bytef * dst_buf = NULL
-    cdef unsigned int bytes_read = 0, bytes_inflated = 0
-    cdef int number_of_blocks = 0
-    cdef Block blocks[BLOCK_BATCH_SIZE]
-
-    cdef BGZipStream src
-    src.next_in = src_buff
-    src.available_in = len(src_buff)
-
-    py_memoryview_to_buffer(py_dst_mem_view, &dst_buf)
-    cdef unsigned int avail_out = PySequence_Size(<PyObject *>py_dst_mem_view)
-
-    with nogil:
-        for i in range(BLOCK_BATCH_SIZE):
-            err = read_block(&blocks[i], &src)
-            if BGZIP_OK == err:
-                pass
-            elif BGZIP_INSUFFICIENT_BYTES == err:
-                break
-            elif BGZIP_MALFORMED_HEADER == err:
-                raise BGZIPMalformedHeaderException("Block gzip magic not found in header.")
-            else:
-                raise BGZIPException("decompress 2 error")
-            if avail_out < bytes_inflated + blocks[i].inflated_size:
-                break
-            bytes_read += 1 + blocks[i].block_size
-            bytes_inflated += blocks[i].inflated_size
-            number_of_blocks += 1
-
-        for i in range(number_of_blocks):
-            blocks[i].next_out = dst_buf
-            dst_buf += blocks[i].inflated_size
-
-        for i in prange(number_of_blocks, num_threads=num_threads, schedule="dynamic"):
-            inflate_block(&blocks[i])
-
-    return bytes_read, bytes_inflated
-
 def inflate_chunks(list py_src_mem_views, object dst_buff_obj, int num_threads):
     """
     Inflate bytes from `py_src_mem_views` into `dst_buff`
