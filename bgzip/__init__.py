@@ -100,12 +100,12 @@ def inflate_chunks(chunks: Sequence[memoryview],
                    inflate_buf: memoryview,
                    num_threads: int=cpu_count()) -> Tuple[List[memoryview], List[memoryview]]:
     inflate_info = bgu.inflate_chunks(chunks, inflate_buf, num_threads)
-    output_views: List[memoryview] = [None] * len(inflate_info['block_sizes'])  # type: ignore
+    blocks: List[memoryview] = [None] * len(inflate_info['block_sizes'])  # type: ignore
     total = 0
     for i, sz in enumerate(inflate_info['block_sizes']):
-        output_views[i] = inflate_buf[total: total + sz]
+        blocks[i] = inflate_buf[total: total + sz]
         total += sz
-    return inflate_info['remaining_chunks'], output_views
+    return inflate_info['remaining_chunks'], blocks
 
 class BGZipWriter(io.IOBase):
     def __init__(self, fileobj: IO, num_threads: int=cpu_count()):
