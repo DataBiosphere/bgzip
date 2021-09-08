@@ -241,10 +241,10 @@ def inflate_chunks(list py_src_mem_views, object dst_buff_obj, int num_threads):
         remaining_chunks = list()
     remaining_chunks.extend(py_src_mem_views[chunk_index + 1:])
 
-    return (bytes_read,
-            bytes_inflated,
-            remaining_chunks,
-            [blocks[i].inflated_size for i in range(block_index)])
+    return {'bytes_read':       bytes_read,
+            'bytes_inflated':   bytes_inflated,
+            'remaining_chunks': remaining_chunks,
+            'block_sizes':      [blocks[i].inflated_size for i in range(block_index)]}
 
 cdef bgzip_err compress_block(Block * block) nogil:
     cdef z_stream zst
