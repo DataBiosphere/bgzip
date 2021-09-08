@@ -35,16 +35,16 @@ class BGZipReader(io.RawIOBase):
     def _fetch_and_inflate(self):
         while True:
             self._input_data += self.fileobj.read(self.raw_read_chunk_size)
-            bytes_read, bytes_inflated, _, _ = bgu.inflate_chunks([memoryview(self._input_data)],
-                                                                  self._inflate_buf[self._start:],
-                                                                  num_threads=self.num_threads)
-            if self._input_data and not bytes_inflated:
+            inflate_info = bgu.inflate_chunks([memoryview(self._input_data)],
+                                              self._inflate_buf[self._start:],
+                                              num_threads=self.num_threads)
+            if self._input_data and not inflate_info['bytes_inflated']:
                 # Not enough space at end of buffer, reset indices
                 assert self._start == self._stop, "Read error. Please contact bgzip maintainers."
                 self._start = self._stop = 0
             else:
-                self._input_data = self._input_data[bytes_read:]
-                self._stop += bytes_inflated
+                self._input_data = self._input_data[inflate_info['bytes_read']:]
+                self._stop += inflate_info['bytes_inflated']
                 break
 
     def _read(self, requested_size: int) -> memoryview:
@@ -99,13 +99,13 @@ class BGZipReader(io.RawIOBase):
 def inflate_chunks(chunks: Sequence[memoryview],
                    inflate_buf: memoryview,
                    num_threads: int=cpu_count()) -> Tuple[List[memoryview], List[memoryview]]:
-    _, _, remaining_chunks, inflated_sizes = bgu.inflate_chunks(chunks, inflate_buf, num_threads)
-    output_views: List[memoryview] = [None] * len(inflated_sizes)  # type: ignore
+    inflate_info = bgu.inflate_chunks(chunks, inflate_buf, num_threads)
+    output_views: List[memoryview] = [None] * len(inflate_info['block_sizes'])  # type: ignore
     total = 0
-    for i, sz in enumerate(inflated_sizes):
+    for i, sz in enumerate(inflate_info['block_sizes']):
         output_views[i] = inflate_buf[total: total + sz]
         total += sz
-    return remaining_chunks, output_views
+    return inflate_info['remaining_chunks'], output_views
 
 class BGZipWriter(io.IOBase):
     def __init__(self, fileobj: IO, num_threads: int=cpu_count()):
