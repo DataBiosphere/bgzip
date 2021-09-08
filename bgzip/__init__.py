@@ -1,7 +1,7 @@
 import io
 from math import floor, ceil
 from multiprocessing import cpu_count
-from typing import Generator, IO, Iterable, List, Sequence, Tuple
+from typing import Any, Dict, Generator, IO, List, Sequence, Tuple
 
 from bgzip import bgzip_utils as bgu  # type: ignore
 
@@ -98,14 +98,15 @@ class BGZipReader(io.RawIOBase):
 
 def inflate_chunks(chunks: Sequence[memoryview],
                    inflate_buf: memoryview,
-                   num_threads: int=cpu_count()) -> Tuple[List[memoryview], List[memoryview]]:
+                   num_threads: int=cpu_count()) -> Dict[str, Any]:
     inflate_info = bgu.inflate_chunks(chunks, inflate_buf, num_threads)
     blocks: List[memoryview] = [None] * len(inflate_info['block_sizes'])  # type: ignore
     total = 0
     for i, sz in enumerate(inflate_info['block_sizes']):
         blocks[i] = inflate_buf[total: total + sz]
         total += sz
-    return inflate_info['remaining_chunks'], blocks
+    inflate_info['blocks'] = blocks
+    return inflate_info
 
 class BGZipWriter(io.IOBase):
     def __init__(self, fileobj: IO, num_threads: int=cpu_count()):
