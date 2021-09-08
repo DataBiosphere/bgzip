@@ -195,6 +195,8 @@ def inflate_chunks(list py_src_mem_views, object dst_buff_obj, int num_threads):
     cdef Bytef * out = NULL
     cdef Block blocks[BLOCK_BATCH_SIZE]
     cdef BGZipStream curr, src[BLOCK_BATCH_SIZE]
+    cdef int blocks_per_chunk[BLOCK_BATCH_SIZE]
+    blocks_per_chunk[0] = 0
 
     for i, view in zip(range(BLOCK_BATCH_SIZE), py_src_mem_views):
         py_memoryview_to_buffer(view, &(src[i].next_in))
@@ -208,6 +210,7 @@ def inflate_chunks(list py_src_mem_views, object dst_buff_obj, int num_threads):
         while chunk_index < number_of_source_chunks and block_index < BLOCK_BATCH_SIZE:
             if 0 == src[chunk_index].available_in:
                 chunk_index += 1
+                blocks_per_chunk[chunk_index] = 0
                 continue
             curr = src[chunk_index]
             err = read_block(&blocks[block_index], &src[chunk_index])
@@ -222,6 +225,7 @@ def inflate_chunks(list py_src_mem_views, object dst_buff_obj, int num_threads):
             if avail_out < bytes_inflated + blocks[block_index].inflated_size:
                 src[chunk_index] = curr
                 break
+            blocks_per_chunk[chunk_index] += 1
             bytes_read += 1 + blocks[block_index].block_size
             bytes_inflated += blocks[block_index].inflated_size
             block_index += 1
@@ -244,7 +248,8 @@ def inflate_chunks(list py_src_mem_views, object dst_buff_obj, int num_threads):
     return {'bytes_read':       bytes_read,
             'bytes_inflated':   bytes_inflated,
             'remaining_chunks': remaining_chunks,
-            'block_sizes':      [blocks[i].inflated_size for i in range(block_index)]}
+            'block_sizes':      [blocks[i].inflated_size for i in range(block_index)],
+            'blocks_per_chunk': [blocks_per_chunk[i] for i in range(len(py_src_mem_views) - len(remaining_chunks))]}
 
 cdef bgzip_err compress_block(Block * block) nogil:
     cdef z_stream zst
