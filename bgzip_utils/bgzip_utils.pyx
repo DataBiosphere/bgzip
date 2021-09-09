@@ -186,13 +186,13 @@ cdef py_memoryview_to_buffer(object py_memoryview, Bytef ** buf):
     else:
         raise TypeError("'py_memoryview' must be a memoryview instance.")
 
-def inflate_chunks(list py_src_mem_views, object dst_buff_obj, int num_threads):
+def inflate_chunks(list py_src_mem_views, object py_dst_buf, int num_threads):
     """
     Inflate bytes from `py_src_mem_views` into `dst_buff`
     """
     cdef int i, err
     cdef int bytes_read = 0, bytes_inflated = 0, number_of_source_chunks = 0, block_index = 0, chunk_index = 0
-    cdef Bytef * out = NULL
+    cdef Bytef * dst_buf = NULL
     cdef Block blocks[BLOCK_BATCH_SIZE]
     cdef BGZipStream curr, src[BLOCK_BATCH_SIZE]
     cdef int blocks_per_chunk[BLOCK_BATCH_SIZE]
@@ -203,8 +203,8 @@ def inflate_chunks(list py_src_mem_views, object dst_buff_obj, int num_threads):
         src[i].available_in = len(view)
     number_of_source_chunks = i + 1
 
-    py_memoryview_to_buffer(dst_buff_obj, &out)
-    cdef unsigned int avail_out = PySequence_Size(<PyObject *>dst_buff_obj)
+    py_memoryview_to_buffer(py_dst_buf, &dst_buf)
+    cdef unsigned int avail_out = PySequence_Size(<PyObject *>py_dst_buf)
 
     with nogil:
         while chunk_index < number_of_source_chunks and block_index < BLOCK_BATCH_SIZE:
@@ -231,8 +231,8 @@ def inflate_chunks(list py_src_mem_views, object dst_buff_obj, int num_threads):
             block_index += 1
 
         for i in range(block_index):
-            blocks[i].next_out = out
-            out += blocks[i].inflated_size
+            blocks[i].next_out = dst_buf
+            dst_buf += blocks[i].inflated_size
 
         for i in prange(block_index, num_threads=num_threads, schedule="dynamic"):
             inflate_block(&blocks[i])
