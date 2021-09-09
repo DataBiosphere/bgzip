@@ -71,6 +71,14 @@ cdef struct bgzip_stream_s:
     unsigned int available_in
     Bytef *next_in
 
+ctypedef chunk_s Chunk
+cdef struct chunk_s:
+    BGZipStream src
+    Block * blocks
+    unsigned int num_blocks
+    unsigned int inflated_size
+    unsigned int bytes_read
+
 class BGZIPException(Exception):
     pass
 
@@ -186,70 +194,78 @@ cdef py_memoryview_to_buffer(object py_memoryview, Bytef ** buf):
     else:
         raise TypeError("'py_memoryview' must be a memoryview instance.")
 
+cdef void read_chunk(Chunk *chunk, int blocks_available, unsigned int output_bytes_available) nogil:
+    cdef int i = 0
+    cdef BGZipStream curr
+
+    chunk[0].num_blocks = chunk[0].inflated_size = chunk[0].bytes_read = 0
+
+    for i in range(blocks_available):
+        if not chunk[0].src.available_in:
+            break
+        curr = chunk[0].src
+        err = read_block(&chunk[0].blocks[i], &chunk[0].src)
+        if BGZIP_OK == err:
+            pass
+        elif BGZIP_INSUFFICIENT_BYTES == err:
+            break
+        elif BGZIP_MALFORMED_HEADER == err:
+            raise BGZIPMalformedHeaderException("Block gzip magic not found in header.")
+        else:
+            raise BGZIPException("decompress 2 error")
+        if output_bytes_available < chunk[0].inflated_size + chunk[0].blocks[i].inflated_size:
+            chunk[0].src = curr
+            break
+        chunk[0].num_blocks += 1
+        chunk[0].inflated_size += chunk[0].blocks[i].inflated_size
+        chunk[0].bytes_read += 1 + chunk[0].blocks[i].block_size
+
 def inflate_chunks(list py_src_mem_views, object py_dst_buf, int num_threads):
     """
     Inflate bytes from `py_src_mem_views` into `dst_buff`
     """
-    cdef int i, err
-    cdef int bytes_read = 0, bytes_inflated = 0, number_of_source_chunks = 0, block_index = 0, chunk_index = 0
+    cdef int i, err, num_src_chunks = 0, num_blocks_read = 0, num_chunks_read = 0
     cdef Bytef * dst_buf = NULL
     cdef Block blocks[BLOCK_BATCH_SIZE]
-    cdef BGZipStream curr, src[BLOCK_BATCH_SIZE]
-    cdef int blocks_per_chunk[BLOCK_BATCH_SIZE]
-    blocks_per_chunk[0] = 0
+    cdef Chunk chunks[BLOCK_BATCH_SIZE]
 
-    for i, view in zip(range(BLOCK_BATCH_SIZE), py_src_mem_views):
-        py_memoryview_to_buffer(view, &(src[i].next_in))
-        src[i].available_in = len(view)
-    number_of_source_chunks = i + 1
+    num_src_chunks = min(len(py_src_mem_views), BLOCK_BATCH_SIZE)
+    for i in range(num_src_chunks):
+        py_memoryview_to_buffer(py_src_mem_views[i], &chunks[i].src.next_in)
+        chunks[i].src.available_in = len(py_src_mem_views[i])
 
     py_memoryview_to_buffer(py_dst_buf, &dst_buf)
     cdef unsigned int avail_out = PySequence_Size(<PyObject *>py_dst_buf)
 
     with nogil:
-        while chunk_index < number_of_source_chunks and block_index < BLOCK_BATCH_SIZE:
-            if 0 == src[chunk_index].available_in:
-                chunk_index += 1
-                blocks_per_chunk[chunk_index] = 0
-                continue
-            curr = src[chunk_index]
-            err = read_block(&blocks[block_index], &src[chunk_index])
-            if BGZIP_OK == err:
-                pass
-            elif BGZIP_INSUFFICIENT_BYTES == err:
+        for i in range(num_src_chunks):
+            chunks[i].blocks = &blocks[num_blocks_read]
+            read_chunk(&chunks[i], BLOCK_BATCH_SIZE - num_blocks_read, avail_out)
+            avail_out -= chunks[i].inflated_size
+            num_blocks_read += chunks[i].num_blocks
+            num_chunks_read += 1
+            if chunks[i].src.available_in:
                 break
-            elif BGZIP_MALFORMED_HEADER == err:
-                raise BGZIPMalformedHeaderException("Block gzip magic not found in header.")
-            else:
-                raise BGZIPException("decompress 2 error")
-            if avail_out < bytes_inflated + blocks[block_index].inflated_size:
-                src[chunk_index] = curr
-                break
-            blocks_per_chunk[chunk_index] += 1
-            bytes_read += 1 + blocks[block_index].block_size
-            bytes_inflated += blocks[block_index].inflated_size
-            block_index += 1
 
-        for i in range(block_index):
+        for i in range(num_blocks_read):
             blocks[i].next_out = dst_buf
             dst_buf += blocks[i].inflated_size
 
-        for i in prange(block_index, num_threads=num_threads, schedule="dynamic"):
+        for i in prange(num_blocks_read, num_threads=num_threads, schedule="dynamic"):
             inflate_block(&blocks[i])
 
-    chunk_index = min(chunk_index, number_of_source_chunks - 1) 
-    sz = src[chunk_index].available_in
+    sz = chunks[num_chunks_read - 1].src.available_in
     if sz:
-        remaining_chunks = [py_src_mem_views[chunk_index][-sz:]]
+        remaining_chunks = [py_src_mem_views[num_chunks_read - 1][-sz:]]
     else:
         remaining_chunks = list()
-    remaining_chunks.extend(py_src_mem_views[chunk_index + 1:])
+    remaining_chunks.extend(py_src_mem_views[num_chunks_read:])
 
-    return {'bytes_read':       bytes_read,
-            'bytes_inflated':   bytes_inflated,
+    return {'bytes_read':       sum(chunks[i].bytes_read for i in range(num_chunks_read)),
+            'bytes_inflated':   sum(chunks[i].inflated_size for i in range(num_chunks_read)),
             'remaining_chunks': remaining_chunks,
-            'block_sizes':      [blocks[i].inflated_size for i in range(block_index)],
-            'blocks_per_chunk': [blocks_per_chunk[i] for i in range(len(py_src_mem_views) - len(remaining_chunks))]}
+            'block_sizes':      [blocks[i].inflated_size for i in range(num_blocks_read)],
+            'blocks_per_chunk': [chunks[i].num_blocks for i in range(num_chunks_read)]}
 
 cdef bgzip_err compress_block(Block * block) nogil:
     cdef z_stream zst
