@@ -220,19 +220,19 @@ cdef void read_chunk(Chunk *chunk, int blocks_available, unsigned int output_byt
         chunk[0].inflated_size += chunk[0].blocks[i].inflated_size
         chunk[0].bytes_read += 1 + chunk[0].blocks[i].block_size
 
-def inflate_chunks(list py_src_mem_views, object py_dst_buf, int num_threads):
+def inflate_chunks(list py_chunks, object py_dst_buf, int num_threads):
     """
-    Inflate bytes from `py_src_mem_views` into `dst_buff`
+    Inflate bytes from `py_chunks` into `dst_buff`
     """
     cdef int i, err, num_src_chunks = 0, num_blocks_read = 0, num_chunks_read = 0
     cdef Bytef * dst_buf = NULL
     cdef Block blocks[BLOCK_BATCH_SIZE]
     cdef Chunk chunks[BLOCK_BATCH_SIZE]
 
-    num_src_chunks = min(len(py_src_mem_views), BLOCK_BATCH_SIZE)
+    num_src_chunks = min(len(py_chunks), BLOCK_BATCH_SIZE)
     for i in range(num_src_chunks):
-        py_memoryview_to_buffer(py_src_mem_views[i], &chunks[i].src.next_in)
-        chunks[i].src.available_in = len(py_src_mem_views[i])
+        py_memoryview_to_buffer(py_chunks[i], &chunks[i].src.next_in)
+        chunks[i].src.available_in = len(py_chunks[i])
 
     py_memoryview_to_buffer(py_dst_buf, &dst_buf)
     cdef unsigned int avail_out = PySequence_Size(<PyObject *>py_dst_buf)
@@ -256,10 +256,10 @@ def inflate_chunks(list py_src_mem_views, object py_dst_buf, int num_threads):
 
     sz = chunks[num_chunks_read - 1].src.available_in
     if sz:
-        remaining_chunks = [py_src_mem_views[num_chunks_read - 1][-sz:]]
+        remaining_chunks = [py_chunks[num_chunks_read - 1][-sz:]]
     else:
         remaining_chunks = list()
-    remaining_chunks.extend(py_src_mem_views[num_chunks_read:])
+    remaining_chunks.extend(py_chunks[num_chunks_read:])
 
     return {'bytes_read':       sum(chunks[i].bytes_read for i in range(num_chunks_read)),
             'bytes_inflated':   sum(chunks[i].inflated_size for i in range(num_chunks_read)),
