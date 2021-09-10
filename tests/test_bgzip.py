@@ -92,6 +92,7 @@ class TestBGZipReader(unittest.TestCase):
             reinflated_data = b""
             while remaining_chunks:
                 inflate_info = bgzip.inflate_chunks(remaining_chunks, inflate_buf)
+                self.assertGreater(inflate_info['bytes_inflated'], 0)
                 remaining_chunks = inflate_info['remaining_chunks']
                 reinflated_data += b"".join(inflate_info['blocks'])
             self.assertEqual(expected_data, reinflated_data)
