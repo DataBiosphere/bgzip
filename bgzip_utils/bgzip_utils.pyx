@@ -224,7 +224,7 @@ def inflate_chunks(list py_chunks, object py_dst_buf, int num_threads):
     """
     Inflate bytes from `py_chunks` into `dst_buff`
     """
-    cdef int i, err, num_src_chunks = 0, num_blocks_read = 0, num_chunks_read = 0
+    cdef int i, err, num_chunks_read, num_src_chunks = 0, num_blocks_read = 0
     cdef Bytef * dst_buf = NULL
     cdef Block blocks[BLOCK_BATCH_SIZE]
     cdef Chunk chunks[BLOCK_BATCH_SIZE]
@@ -243,9 +243,10 @@ def inflate_chunks(list py_chunks, object py_dst_buf, int num_threads):
             read_chunk(&chunks[i], BLOCK_BATCH_SIZE - num_blocks_read, avail_out)
             avail_out -= chunks[i].inflated_size
             num_blocks_read += chunks[i].num_blocks
-            num_chunks_read += 1
             if chunks[i].src.available_in:
                 break
+
+        num_chunks_read = 1 + i if num_blocks_read else 0
 
         for i in range(num_blocks_read):
             blocks[i].next_out = dst_buf
@@ -254,12 +255,15 @@ def inflate_chunks(list py_chunks, object py_dst_buf, int num_threads):
         for i in prange(num_blocks_read, num_threads=num_threads, schedule="dynamic"):
             inflate_block(&blocks[i])
 
-    sz = chunks[num_chunks_read - 1].src.available_in
-    if sz:
-        remaining_chunks = [py_chunks[num_chunks_read - 1][-sz:]]
+    if num_chunks_read:
+        num_remaining_bytes = chunks[num_chunks_read - 1].src.available_in
+        if num_remaining_bytes:
+            remaining_chunks = [py_chunks[num_chunks_read - 1][-num_remaining_bytes:]]
+        else:
+            remaining_chunks = list()
+        remaining_chunks.extend(py_chunks[num_chunks_read:])
     else:
-        remaining_chunks = list()
-    remaining_chunks.extend(py_chunks[num_chunks_read:])
+        remaining_chunks = [c for c in py_chunks]
 
     return {'bytes_read':       sum(chunks[i].bytes_read for i in range(num_chunks_read)),
             'bytes_inflated':   sum(chunks[i].inflated_size for i in range(num_chunks_read)),
