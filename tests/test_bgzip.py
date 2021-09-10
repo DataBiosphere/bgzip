@@ -116,6 +116,12 @@ class TestBGZipReader(unittest.TestCase):
             _test_inflate_chunks([memoryview(b"".join(chunk))
                                   for chunk in _randomly_chunked(deflated_blocks)])
 
+        with self.subTest("too small inflate buf should raise"):
+            inflate_buf = memoryview(bytearray(1024))
+            with self.assertRaises(bgzip.bgu.BGZIPNoChunksInflated):
+                _test_inflate_chunks([memoryview(b"".join(chunk))
+                                      for chunk in _randomly_chunked(deflated_blocks)])
+
         with self.subTest("passing in non-memoryview buffers should raise"):
             with self.assertRaises(TypeError):
                 bgzip.inflate_chunks([b"asfd"], inflate_buf)

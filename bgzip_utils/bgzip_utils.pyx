@@ -82,6 +82,9 @@ cdef struct chunk_s:
 class BGZIPException(Exception):
     pass
 
+class BGZIPNoChunksInflated(BGZIPException):
+    pass
+
 class BGZIPMalformedHeaderException(BGZIPException):
     pass
 
@@ -246,6 +249,9 @@ def inflate_chunks(list py_src_mem_views, object py_dst_buf, int num_threads):
             num_chunks_read += 1
             if chunks[i].src.available_in:
                 break
+
+        if not chunks[0].num_blocks:
+            raise BGZIPNoChunksInflated("Not enough space in buffer to inflate any blocks.")
 
         for i in range(num_blocks_read):
             blocks[i].next_out = dst_buf
