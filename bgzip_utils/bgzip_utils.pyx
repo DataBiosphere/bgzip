@@ -4,6 +4,7 @@ import struct
 from math import ceil
 
 from libc.stdlib cimport abort
+from libc.string cimport memset
 from cython.parallel import prange
 
 from czlib cimport *
@@ -198,8 +199,6 @@ cdef void read_chunk(Chunk *chunk, int blocks_available, unsigned int output_byt
     cdef int i = 0
     cdef BGZipStream curr
 
-    chunk[0].num_blocks = chunk[0].inflated_size = chunk[0].bytes_read = 0
-
     for i in range(blocks_available):
         if not chunk[0].src.available_in:
             break
@@ -230,6 +229,8 @@ def inflate_chunks(list py_chunks, object py_dst_buf, int num_threads):
     cdef Block blocks[BLOCK_BATCH_SIZE]
     cdef Chunk chunks[BLOCK_BATCH_SIZE]
 
+    memset(&chunks[0], 0, BLOCK_BATCH_SIZE * sizeof(Chunk))
+
     num_src_chunks = min(len(py_chunks), BLOCK_BATCH_SIZE)
     for i in range(num_src_chunks):
         py_memoryview_to_buffer(py_chunks[i], &chunks[i].src.next_in)
@@ -256,15 +257,13 @@ def inflate_chunks(list py_chunks, object py_dst_buf, int num_threads):
         for i in prange(num_blocks_read, num_threads=num_threads, schedule="dynamic"):
             inflate_block(&blocks[i])
 
-    if num_chunks_read:
-        num_remaining_bytes = chunks[num_chunks_read - 1].src.available_in
-        if num_remaining_bytes:
-            remaining_chunks = [py_chunks[num_chunks_read - 1][-num_remaining_bytes:]]
+    remaining_chunks = list()
+    for i, py_chunk in enumerate(py_chunks):
+        if i < BLOCK_BATCH_SIZE:
+            if chunks[i].bytes_read < len(py_chunk):
+                remaining_chunks.append(py_chunk[chunks[i].bytes_read:])
         else:
-            remaining_chunks = list()
-        remaining_chunks.extend(py_chunks[num_chunks_read:])
-    else:
-        remaining_chunks = [c for c in py_chunks]
+            remaining_chunks.append(py_chunk)
 
     return {'bytes_read':       sum(chunks[i].bytes_read for i in range(num_chunks_read)),
             'bytes_inflated':   sum(chunks[i].inflated_size for i in range(num_chunks_read)),
