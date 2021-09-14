@@ -98,8 +98,9 @@ class BGZipReader(io.RawIOBase):
 
 def inflate_chunks(chunks: Sequence[memoryview],
                    inflate_buf: memoryview,
-                   num_threads: int=cpu_count()) -> Dict[str, Any]:
-    inflate_info = bgu.inflate_chunks(chunks, inflate_buf, num_threads)
+                   num_threads: int=cpu_count(),
+                   atomic: bool=False) -> Dict[str, Any]:
+    inflate_info = bgu.inflate_chunks(chunks, inflate_buf, num_threads, atomic=atomic)
     blocks: List[memoryview] = [None] * len(inflate_info['block_sizes'])  # type: ignore
     total = 0
     for i, sz in enumerate(inflate_info['block_sizes']):

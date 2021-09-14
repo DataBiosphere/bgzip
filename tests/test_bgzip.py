@@ -87,11 +87,11 @@ class TestBGZipReader(unittest.TestCase):
             deflated_blocks.extend([bytes(b) for b in blocks])
             data = data[bytes_deflated:]
 
-        def _test_inflate_chunks(remaining_chunks: List[memoryview]):
+        def _test_inflate_chunks(remaining_chunks: List[memoryview], atomic: bool=False):
             remaining_chunks = remaining_chunks.copy()
             reinflated_data = b""
             while remaining_chunks:
-                inflate_info = bgzip.inflate_chunks(remaining_chunks, inflate_buf)
+                inflate_info = bgzip.inflate_chunks(remaining_chunks, inflate_buf, atomic=atomic)
                 self.assertGreater(inflate_info['bytes_inflated'], 0)
                 remaining_chunks = inflate_info['remaining_chunks']
                 reinflated_data += b"".join(inflate_info['blocks'])
@@ -111,6 +111,18 @@ class TestBGZipReader(unittest.TestCase):
         with self.subTest("trailing large chunk"):
             _test_inflate_chunks([memoryview(deflated_blocks[0]),
                                   memoryview(b"".join(deflated_blocks[1:]))])
+
+        with self.subTest("leading large chunk atomic"):
+            inflate_buf = memoryview(bytearray(200 * 1024))
+            chunks = [memoryview(b"".join(deflated_blocks[:-1])), memoryview(deflated_blocks[-1])]
+            inflate_info = bgzip.inflate_chunks(chunks, inflate_buf, atomic=True)
+            self.assertEqual(inflate_info['remaining_chunks'], chunks)
+
+        with self.subTest("trailing large chunk atomic"):
+            inflate_buf = memoryview(bytearray(200 * 1024))
+            chunks = [memoryview(deflated_blocks[0]), memoryview(b"".join(deflated_blocks[1:]))]
+            inflate_info = bgzip.inflate_chunks(chunks, inflate_buf, atomic=True)
+            self.assertEqual(inflate_info['remaining_chunks'][0], chunks[1])
 
         with self.subTest("small inflate buf"):
             inflate_buf = memoryview(bytearray(200 * 1024))
