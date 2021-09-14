@@ -132,6 +132,23 @@ class TestBGZipReader(unittest.TestCase):
             with self.assertRaises(TypeError):
                 bgzip.inflate_chunks([b"asfd"], inflate_buf)
 
+    def test_inflate_streamed_chunk(self):
+        with open("tests/fixtures/partial.vcf.gz", "rb") as raw:
+            chunk = raw.read()
+        with gzip.GzipFile(fileobj=io.BytesIO(chunk)) as fh:
+            expected_data = fh.read()
+        inflate_buf = memoryview(bytearray(1024 * 1024 * 50))
+        input_buf, data = bytes(), bytes()
+        with open("tests/fixtures/partial.vcf.gz", "rb") as raw:
+            while True:
+                input_buf += raw.read(random.randint(0, 100 * 1024))
+                if not input_buf:
+                    break
+                inflate_info = bgzip.inflate_chunks([memoryview(input_buf)], inflate_buf)
+                input_buf = b"".join(inflate_info['remaining_chunks'])
+                data += b"".join(inflate_info['blocks'])
+        self.assertEqual(expected_data, data)
+
 def _randomly_chunked(items: Sequence[Any]) -> Generator[Sequence[Any], None, None]:
     items = [i for i in items]
     while items:
