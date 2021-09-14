@@ -208,6 +208,7 @@ cdef void read_chunk(Chunk *chunk, int blocks_available, unsigned int output_byt
         if BGZIP_OK == err:
             pass
         elif BGZIP_INSUFFICIENT_BYTES == err:
+            chunk[0].src = curr
             break
         elif BGZIP_MALFORMED_HEADER == err:
             raise BGZIPMalformedHeaderException("Block gzip magic not found in header.")
