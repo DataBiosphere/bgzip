@@ -220,14 +220,14 @@ cdef void read_chunk(Chunk *chunk, int blocks_available, unsigned int output_byt
         chunk[0].inflated_size += chunk[0].blocks[i].inflated_size
         chunk[0].bytes_read += 1 + chunk[0].blocks[i].block_size
 
-def inflate_chunks(list py_chunks, object py_dst_buf, int num_threads):
+def inflate_chunks(list py_chunks, object py_dst_buf, int num_threads, atomic: bool=False):
     """
     Inflate bytes from `py_chunks` into `dst_buff`
     """
-    cdef int i, err, num_chunks_read, num_src_chunks = 0, num_blocks_read = 0
+    cdef int i, err, num_chunks_read, num_src_chunks = 0, num_blocks_read = 0, _atomic = int(atomic)
     cdef Bytef * dst_buf = NULL
     cdef Block blocks[BLOCK_BATCH_SIZE]
-    cdef Chunk chunks[BLOCK_BATCH_SIZE]
+    cdef Chunk atom, chunks[BLOCK_BATCH_SIZE]
 
     memset(&chunks[0], 0, BLOCK_BATCH_SIZE * sizeof(Chunk))
 
@@ -242,10 +242,15 @@ def inflate_chunks(list py_chunks, object py_dst_buf, int num_threads):
     with nogil:
         for i in range(num_src_chunks):
             chunks[i].blocks = &blocks[num_blocks_read]
+            atom = chunks[i]
             read_chunk(&chunks[i], BLOCK_BATCH_SIZE - num_blocks_read, avail_out)
             avail_out -= chunks[i].inflated_size
             num_blocks_read += chunks[i].num_blocks
             if chunks[i].src.available_in:
+                if _atomic:
+                    num_blocks_read -= chunks[i].num_blocks
+                    chunks[i] = atom
+                    i -= 1
                 break
 
         num_chunks_read = 1 + i if num_blocks_read else 0
