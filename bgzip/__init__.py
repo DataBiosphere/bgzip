@@ -1,7 +1,7 @@
 import io
 from math import floor, ceil
 from multiprocessing import cpu_count
-from typing import Any, Dict, Generator, IO, List, Sequence, Tuple
+from typing import Any, Dict, Generator, IO, List, Optional, Sequence, Tuple, Union
 
 from bgzip import bgzip_utils as bgu  # type: ignore
 
@@ -96,24 +96,48 @@ class BGZipReader(io.RawIOBase):
         if hasattr(self, "_buffered"):
             self._buffered.close()
 
-def inflate_chunks(chunks: Sequence[memoryview],
-                   inflate_buf: memoryview,
-                   num_threads: int=cpu_count(),
-                   atomic: bool=False) -> Dict[str, Any]:
-    inflate_info = bgu.inflate_chunks(chunks, inflate_buf, num_threads, atomic=atomic)
-    blocks: List[memoryview] = [None] * len(inflate_info['block_sizes'])  # type: ignore
-    total = 0
-    for i, sz in enumerate(inflate_info['block_sizes']):
-        blocks[i] = inflate_buf[total: total + sz]
-        total += sz
-    inflate_info['blocks'] = blocks
-    return inflate_info
+class Inflater:
+    def __init__(self,
+                 buffer_size: Optional[int]=None,
+                 num_threads: int=cpu_count(),
+                 atomic: bool=False):
+        self.buffer = memoryview(bytearray(buffer_size or DEFAULT_DECOMPRESS_BUFFER_SZ))
+        self._num_threads = num_threads
+        self.atomic = atomic
+        self.start = self.stop = 0
+
+    def inflate(self, chunks: Sequence[bytes]):
+        inflate_info = bgu.inflate_chunks([memoryview(c) for c in chunks],
+                                          self.buffer,
+                                          self._num_threads,
+                                          atomic=self.atomic)
+        blocks: List[memoryview] = [None] * len(inflate_info['block_sizes'])  # type: ignore
+        total = 0
+        for i, sz in enumerate(inflate_info['block_sizes']):
+            blocks[i] = self.buffer[total: total + sz]
+            total += sz
+        inflate_info['blocks'] = blocks
+
+        total = 0
+        block_sets: List[list] = [None] * len(inflate_info['blocks_per_chunk'])  # type: ignore
+        for i, num_blocks in enumerate(inflate_info['blocks_per_chunk']):
+            block_sets[i] = blocks[total: total + num_blocks]
+            total += num_blocks
+        inflate_info['block_sets'] = block_sets
+
+        return inflate_info
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        pass
 
 class BGZipWriter(io.IOBase):
     def __init__(self, fileobj: IO, num_threads: int=cpu_count()):
         self.fileobj = fileobj
         self._input_buffer = bytearray()
-        self._deflater = Deflater(num_threads)
+        self._deflater = Deflater(num_threads=num_threads)
         self.num_threads = num_threads
 
     def writable(self):
@@ -140,7 +164,7 @@ class BGZipWriter(io.IOBase):
         self.fileobj.flush()
 
 class Deflater:
-    def __init__(self, num_threads: int=cpu_count(), num_deflate_buffers: int=bgu.block_batch_size):
+    def __init__(self, num_deflate_buffers: int=bgu.block_batch_size, num_threads: int=cpu_count()):
         self._num_threads = num_threads
         self._deflate_bufs = self._gen_buffers(num_deflate_buffers)
 
@@ -156,3 +180,9 @@ class Deflater:
         deflated_sizes = bgu.deflate_to_buffers(data, self._deflate_bufs, self._num_threads)
         bytes_deflated = min(len(data), bgu.block_data_inflated_size * len(deflated_sizes))
         return bytes_deflated, [memoryview(buf)[:sz] for buf, sz in zip(self._deflate_bufs, deflated_sizes)]
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        pass
