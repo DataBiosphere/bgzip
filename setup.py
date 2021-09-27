@@ -57,7 +57,7 @@ setup(
     description='Utilities working with blocked gzip streams.',
     long_description=long_description,
     long_description_content_type='text/markdown',
-    url='https://github.com/xbrianh/bgzip.git',
+    url='https://github.com/DataBiosphere/bgzip.git',
     author='Brian Hannafious',
     author_email='bhannafi@ucsc.edu',
     license='MIT',
