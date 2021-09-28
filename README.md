@@ -34,3 +34,7 @@ Package distribution [PyPI](https://pypi.org/project/bgzip/)
 Please report bugs, issues, feature requests, etc. on [GitHub](https://github.com/DataBiosphere/bgzip).
 
 ![](https://travis-ci.org/DataBiosphere/bgzip.svg?branch=master) ![](https://badge.fury.io/py/bgzip.svg)
+
+## Credits
+getm was created by [Brian Hannafious](https://github.com/xbrianh) at the
+[UCSC Genomics Institute](https://ucscgenomics.soe.ucsc.edu/).
