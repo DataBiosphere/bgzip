@@ -1,3 +1,6 @@
+# Changes for v0.5.0 (2024-06-30)
+Regenerate bgzip_utils/bgzip_utils.c
+
 # Changes for v0.4.0 (2021-05-29)
 Update README.md (#22)
 update readme (#21)
