@@ -139,6 +139,13 @@ class BGZipWriter(io.IOBase):
         self.fileobj.write(bgzip_eof)
         self.fileobj.flush()
 
+    def __del__(self):
+        try:
+            if not self.closed:
+                self.close()
+        except:
+            pass
+
 class Deflater:
     def __init__(self, num_threads: int=cpu_count(), num_deflate_buffers: int=bgu.block_batch_size):
         self._num_threads = num_threads
