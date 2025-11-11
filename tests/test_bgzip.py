@@ -31,6 +31,8 @@ class TestBGZipReader(unittest.TestCase):
                         break
                     data.extend(d)
                     d.release()
+            with self.assertRaises(ValueError):
+                fh.read(10)
         self.assertEqual(self.expected_data, data)
 
     def test_empty(self):
@@ -54,6 +56,8 @@ class TestBGZipReader(unittest.TestCase):
                         break
                     data.extend(d)
                     d.release()
+            with self.assertRaises(ValueError):
+                fh.read(10)
         self.assertEqual(self.expected_data, data)
 
     def test_iter(self):
@@ -193,12 +197,45 @@ class TestBGZipWriter(unittest.TestCase):
             n = 987345
             writer.write(inflated_data[:n])
             writer.write(inflated_data[n:])
+
+        with self.assertRaises(ValueError):
+            writer.write(b"lskdjf")
+
         deflated_with_writer = fh_out.getvalue()
 
         self.assertEqual(deflated_with_buffers, deflated_with_writer)
 
         fh_out.seek(0)
         with gzip.GzipFile(fileobj=fh_out) as fh:
+            reinflated_data = fh.read()
+
+        self.assertEqual(inflated_data, reinflated_data)
+        self.assertTrue(deflated_with_writer.endswith(bgzip.bgzip_eof))
+
+    def test_write_context_manager(self):
+        inflated_data = os.urandom(1024 * 1024 * 50)
+        deflater = bgzip.Deflater()
+        deflated_with_buffers = bytes()
+        data = memoryview(bytes(inflated_data))
+        while data:
+            bytes_deflated, deflated_blocks = deflater.deflate(data)
+            data = data[bytes_deflated:]
+            deflated_with_buffers += b"".join(deflated_blocks)
+        deflated_with_buffers += bgzip.bgzip_eof
+
+        with io.BytesIO() as fh_out:
+            with bgzip.BGZipWriter(fh_out) as writer:
+                n = 987345
+                writer.write(inflated_data[:n])
+                writer.write(inflated_data[n:])
+
+            with self.assertRaises(ValueError):
+                writer.write(b"lskdjf")
+
+            deflated_with_writer = fh_out.getvalue()
+        self.assertEqual(deflated_with_buffers, deflated_with_writer)
+
+        with gzip.GzipFile(fileobj=io.BytesIO(deflated_with_writer)) as fh:
             reinflated_data = fh.read()
 
         self.assertEqual(inflated_data, reinflated_data)

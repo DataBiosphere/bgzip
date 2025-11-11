@@ -1,5 +1,4 @@
 import io
-from math import floor, ceil
 from multiprocessing import cpu_count
 from typing import Any, Dict, Generator, IO, List, Sequence, Tuple
 
@@ -48,6 +47,9 @@ class BGZipReader(io.RawIOBase):
                 break
 
     def _read(self, requested_size: int) -> memoryview:
+        if self.closed:
+            msg = "I/O operation on closed file."
+            raise ValueError(msg)
         if self._start == self._stop:
             self._fetch_and_inflate()
         size = min(requested_size, self._stop - self._start)
@@ -75,6 +77,9 @@ class BGZipReader(io.RawIOBase):
         return out
 
     def readinto(self, buff) -> int:
+        if self.closed:
+            msg = "I/O operation on closed file."
+            raise ValueError(msg)
         sz = len(buff)
         bytes_read = 0
         while bytes_read < sz:
@@ -129,15 +134,20 @@ class BGZipWriter(io.IOBase):
                 break
 
     def write(self, data):
+        if self.closed:
+            msg = "I/O operation on closed file."
+            raise ValueError(msg)
         self._input_buffer.extend(data)
         if len(self._input_buffer) > bgu.block_batch_size * bgu.block_data_inflated_size:
             self._compress()
 
     def close(self):
-        if self._input_buffer:
-            self._compress(process_all_chunks=True)
-        self.fileobj.write(bgzip_eof)
-        self.fileobj.flush()
+        if not self.closed:
+            if self._input_buffer:
+                self._compress(process_all_chunks=True)
+            self.fileobj.write(bgzip_eof)
+            self.fileobj.flush()
+            super().close()
 
 class Deflater:
     def __init__(self, num_threads: int=cpu_count(), num_deflate_buffers: int=bgu.block_batch_size):
