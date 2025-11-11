@@ -1,3 +1,6 @@
+# Changes for v0.5.1 (2025-11-11)
+Fix issues with file handle close in python 3.13 (#91)
+
 # Changes for v0.5.0 (2024-06-30)
 Regenerate bgzip_utils/bgzip_utils.c
 
